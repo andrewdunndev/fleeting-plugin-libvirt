@@ -6,12 +6,18 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/digitalocean/go-libvirt"
 )
 
 type libvirtClient struct {
-	l *libvirt.Libvirt
+	uri  *url.URL
+	dial func(*url.URL) (*libvirt.Libvirt, error)
+	live func(*libvirt.Libvirt) bool
+
+	mu sync.Mutex
+	l  *libvirt.Libvirt
 }
 
 func dialLibvirt(uri string) (Client, error) {
@@ -19,14 +25,36 @@ func dialLibvirt(uri string) (Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("plugin_config.uri %q: %w", uri, err)
 	}
-	l, err := libvirt.ConnectToURI(u)
-	if err != nil {
-		return nil, fmt.Errorf("connecting to %s: %w; check the socket path and that the user may use it", uri, err)
+	c := &libvirtClient{uri: u, dial: libvirt.ConnectToURI, live: (*libvirt.Libvirt).IsConnected}
+	if err := c.ensure(); err != nil {
+		return nil, err
 	}
-	return &libvirtClient{l: l}, nil
+	return c, nil
 }
 
-func (c *libvirtClient) Close() error { return c.l.Disconnect() }
+// ensure redials when libvirtd has dropped the connection, so a daemon
+// restart does not outlive the plugin.
+func (c *libvirtClient) ensure() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.l != nil && c.live(c.l) {
+		return nil
+	}
+	l, err := c.dial(c.uri)
+	if err != nil {
+		return fmt.Errorf("connecting to %s: %w; check the socket path and that the user may use it", c.uri, err)
+	}
+	c.l = l
+	return nil
+}
+
+func (c *libvirtClient) cur() *libvirt.Libvirt {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.l
+}
+
+func (c *libvirtClient) Close() error { return c.cur().Disconnect() }
 
 func hasCode(err error, codes ...libvirt.ErrorNumber) bool {
 	var e libvirt.Error
@@ -45,7 +73,10 @@ func (c *libvirtClient) pool(ctx context.Context, name string) (libvirt.StorageP
 	if err := ctx.Err(); err != nil {
 		return libvirt.StoragePool{}, err
 	}
-	p, err := c.l.StoragePoolLookupByName(name)
+	if err := c.ensure(); err != nil {
+		return libvirt.StoragePool{}, err
+	}
+	p, err := c.cur().StoragePoolLookupByName(name)
 	if hasCode(err, libvirt.ErrNoStoragePool) {
 		return p, fmt.Errorf("storage pool %q does not exist; check plugin_config.pool_name", name)
 	}
@@ -57,22 +88,22 @@ func (c *libvirtClient) BaseVolume(ctx context.Context, pool, name string) (Base
 	if err != nil {
 		return Base{}, err
 	}
-	v, err := c.l.StorageVolLookupByName(p, name)
+	v, err := c.cur().StorageVolLookupByName(p, name)
 	if hasCode(err, libvirt.ErrNoStorageVol) {
 		return Base{}, fmt.Errorf("volume %q in pool %q: %w", name, pool, ErrNotFound)
 	}
 	if err != nil {
 		return Base{}, err
 	}
-	_, capacity, _, err := c.l.StorageVolGetInfo(v)
+	_, capacity, _, err := c.cur().StorageVolGetInfo(v)
 	if err != nil {
 		return Base{}, err
 	}
-	path, err := c.l.StorageVolGetPath(v)
+	path, err := c.cur().StorageVolGetPath(v)
 	if err != nil {
 		return Base{}, err
 	}
-	desc, err := c.l.StorageVolGetXMLDesc(v, 0)
+	desc, err := c.cur().StorageVolGetXMLDesc(v, 0)
 	if err != nil {
 		return Base{}, err
 	}
@@ -88,13 +119,13 @@ func (c *libvirtClient) CreateVolume(ctx context.Context, pool, _, xml string) (
 	if err != nil {
 		return "", err
 	}
-	v, err := c.l.StorageVolCreateXML(p, xml, 0)
+	v, err := c.cur().StorageVolCreateXML(p, xml, 0)
 	if err != nil {
 		return "", err
 	}
-	path, err := c.l.StorageVolGetPath(v)
+	path, err := c.cur().StorageVolGetPath(v)
 	if err != nil {
-		_ = c.l.StorageVolDelete(v, libvirt.StorageVolDeleteNormal)
+		_ = c.cur().StorageVolDelete(v, libvirt.StorageVolDeleteNormal)
 		return "", err
 	}
 	return path, nil
@@ -105,14 +136,14 @@ func (c *libvirtClient) DeleteVolume(ctx context.Context, pool, name string) err
 	if err != nil {
 		return err
 	}
-	v, err := c.l.StorageVolLookupByName(p, name)
+	v, err := c.cur().StorageVolLookupByName(p, name)
 	if hasCode(err, libvirt.ErrNoStorageVol) {
 		return fmt.Errorf("volume %q: %w", name, ErrNotFound)
 	}
 	if err != nil {
 		return err
 	}
-	err = c.l.StorageVolDelete(v, libvirt.StorageVolDeleteNormal)
+	err = c.cur().StorageVolDelete(v, libvirt.StorageVolDeleteNormal)
 	if hasCode(err, libvirt.ErrNoStorageVol) {
 		return fmt.Errorf("volume %q: %w", name, ErrNotFound)
 	}
@@ -124,7 +155,7 @@ func (c *libvirtClient) ListVolumes(ctx context.Context, pool string) ([]string,
 	if err != nil {
 		return nil, err
 	}
-	vols, _, err := c.l.StoragePoolListAllVolumes(p, 1, 0)
+	vols, _, err := c.cur().StoragePoolListAllVolumes(p, 1, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +170,10 @@ func (c *libvirtClient) CreateDomain(ctx context.Context, xml string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	_, err := c.l.DomainCreateXML(xml, libvirt.DomainNone)
+	if err := c.ensure(); err != nil {
+		return err
+	}
+	_, err := c.cur().DomainCreateXML(xml, libvirt.DomainNone)
 	return err
 }
 
@@ -147,7 +181,10 @@ func (c *libvirtClient) lookup(ctx context.Context, name string) (libvirt.Domain
 	if err := ctx.Err(); err != nil {
 		return libvirt.Domain{}, err
 	}
-	d, err := c.l.DomainLookupByName(name)
+	if err := c.ensure(); err != nil {
+		return libvirt.Domain{}, err
+	}
+	d, err := c.cur().DomainLookupByName(name)
 	if hasCode(err, libvirt.ErrNoDomain) {
 		return d, fmt.Errorf("domain %q: %w", name, ErrNotFound)
 	}
@@ -159,7 +196,7 @@ func (c *libvirtClient) DestroyDomain(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	err = c.l.DomainDestroy(d)
+	err = c.cur().DomainDestroy(d)
 	if hasCode(err, libvirt.ErrNoDomain, libvirt.ErrOperationInvalid) {
 		return fmt.Errorf("domain %q: %w", name, ErrNotFound)
 	}
@@ -170,7 +207,10 @@ func (c *libvirtClient) ListDomains(ctx context.Context, namePrefix string) ([]D
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	doms, _, err := c.l.ConnectListAllDomains(1, 0)
+	if err := c.ensure(); err != nil {
+		return nil, err
+	}
+	doms, _, err := c.cur().ConnectListAllDomains(1, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +219,7 @@ func (c *libvirtClient) ListDomains(ctx context.Context, namePrefix string) ([]D
 		if !strings.HasPrefix(d.Name, namePrefix) {
 			continue
 		}
-		desc, err := c.l.DomainGetXMLDesc(d, 0)
+		desc, err := c.cur().DomainGetXMLDesc(d, 0)
 		if hasCode(err, libvirt.ErrNoDomain) {
 			continue
 		}
@@ -190,7 +230,7 @@ func (c *libvirtClient) ListDomains(ctx context.Context, namePrefix string) ([]D
 		if err != nil {
 			return nil, err
 		}
-		state, _, err := c.l.DomainGetState(d, 0)
+		state, _, err := c.cur().DomainGetState(d, 0)
 		if hasCode(err, libvirt.ErrNoDomain) {
 			continue
 		}
@@ -209,7 +249,7 @@ func (c *libvirtClient) DomainRunning(ctx context.Context, name string) (bool, e
 	if err != nil {
 		return false, err
 	}
-	state, _, err := c.l.DomainGetState(d, 0)
+	state, _, err := c.cur().DomainGetState(d, 0)
 	if hasCode(err, libvirt.ErrNoDomain) {
 		return false, fmt.Errorf("domain %q: %w", name, ErrNotFound)
 	}
@@ -221,7 +261,7 @@ func (c *libvirtClient) GuestAddresses(ctx context.Context, name string) ([]stri
 	if err != nil {
 		return nil, err
 	}
-	ifaces, err := c.l.DomainInterfaceAddresses(d, uint32(libvirt.DomainInterfaceAddressesSrcAgent), 0)
+	ifaces, err := c.cur().DomainInterfaceAddresses(d, uint32(libvirt.DomainInterfaceAddressesSrcAgent), 0)
 	if hasCode(err, libvirt.ErrNoDomain) {
 		return nil, fmt.Errorf("domain %q: %w", name, ErrNotFound)
 	}

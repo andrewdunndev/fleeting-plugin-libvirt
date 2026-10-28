@@ -109,6 +109,8 @@ func (g *InstanceGroup) isInflight(name string) bool {
 	return ok
 }
 
+var errAdmissionRefused = errors.New("admission refused")
+
 func (g *InstanceGroup) newName() (string, error) {
 	var b [4]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -117,9 +119,9 @@ func (g *InstanceGroup) newName() (string, error) {
 	return g.NamePrefix + ownerTag(g.Owner) + "-" + hex.EncodeToString(b[:]), nil
 }
 
-// Update reports our domains only; a stopped domain is reported Running so
-// its failing Heartbeat leads fleeting to Decrease, the only path that removes
-// an instance. Our volumes with no domain and no create in flight are deleted
+// Update reports our domains only, all as Running: Decrease is the only path
+// that removes an instance, and it is reached when a failing Heartbeat is
+// consulted. Our volumes with no domain and no create in flight are deleted
 // here, best effort.
 func (g *InstanceGroup) Update(ctx context.Context, fn func(instance string, state provider.State)) error {
 	vols, err := g.client.ListVolumes(ctx, g.PoolName)
@@ -169,11 +171,26 @@ func (g *InstanceGroup) Increase(ctx context.Context, n int) (int, error) {
 		}
 		if err := g.createOne(ctx); err != nil {
 			errs = append(errs, err)
+			if errors.Is(err, errAdmissionRefused) {
+				break
+			}
 			continue
 		}
 		created++
 	}
-	return created, errors.Join(errs...)
+	return created, g.partial(created, "increase", errs)
+}
+
+// partial hides errors once some work succeeded: fleeting's gRPC boundary
+// drops the count when an error comes with it, so the instances that did
+// start would be orphaned from its accounting.
+func (g *InstanceGroup) partial(done int, op string, errs []error) error {
+	err := errors.Join(errs...)
+	if done > 0 && err != nil {
+		g.log.Warn("partial "+op, "done", done, "err", err)
+		return nil
+	}
+	return err
 }
 
 func (g *InstanceGroup) createOne(ctx context.Context) error {
@@ -260,7 +277,7 @@ func (g *InstanceGroup) admit(ctx context.Context, name string) error {
 	if ctx.Err() != nil {
 		return fmt.Errorf("admission for %s: admit_command did not finish in %s and was killed: %w", name, admitTimeout, ctx.Err())
 	}
-	return fmt.Errorf("admission refused for %s: admit_command: %w (%s)", name, err, msg)
+	return fmt.Errorf("%w for %s: admit_command: %v (%s)", errAdmissionRefused, name, err, msg)
 }
 
 func (g *InstanceGroup) Decrease(ctx context.Context, instances []string) ([]string, error) {
@@ -281,7 +298,7 @@ func (g *InstanceGroup) Decrease(ctx context.Context, instances []string) ([]str
 		}
 		done = append(done, name)
 	}
-	return done, errors.Join(errs...)
+	return done, g.partial(len(done), "decrease", errs)
 }
 
 func (g *InstanceGroup) ConnectInfo(ctx context.Context, instance string) (provider.ConnectInfo, error) {

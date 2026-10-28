@@ -97,7 +97,7 @@ func TestConcurrentIncreasesAdmitOneAgainstOneSlotLedger(t *testing.T) {
 func TestAdmissionRefusalIsPartialIncreaseAndLeaksNothing(t *testing.T) {
 	g, f, _ := ledgerGroup(t, 2)
 	n, err := g.Increase(context.Background(), 3)
-	if n != 2 || err == nil || !strings.Contains(err.Error(), "admission refused") {
+	if n != 2 || err != nil {
 		t.Fatalf("n=%d err=%v", n, err)
 	}
 	if len(f.domains) != 2 || len(f.volumes) != 2 {
@@ -807,5 +807,38 @@ func TestCancelledCreateStillRemovesItsVolume(t *testing.T) {
 	}
 	if len(f.volumes) != 0 {
 		t.Fatalf("volume left behind: %v", f.volumes)
+	}
+}
+
+func TestFirstAdmissionRefusalStopsIncrease(t *testing.T) {
+	c := baseConfig()
+	c.LockFile = filepath.Join(t.TempDir(), "lock")
+	marker := filepath.Join(t.TempDir(), "calls")
+	c.AdmitCommand = "echo x >> " + marker + "; false"
+	g, _ := newGroup(t, c, false)
+	n, err := g.Increase(context.Background(), 3)
+	if n != 0 || err == nil || !strings.Contains(err.Error(), "admission refused") {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	b, _ := os.ReadFile(marker)
+	if strings.Count(string(b), "x") != 1 {
+		t.Fatalf("admit ran %q, want once", b)
+	}
+}
+
+func TestPartialDecreaseReturnsNilError(t *testing.T) {
+	g, _ := newGroup(t, baseConfig(), false)
+	if _, err := g.Increase(context.Background(), 1); err != nil {
+		t.Fatal(err)
+	}
+	names := []string{}
+	_ = g.Update(context.Background(), func(n string, _ provider.State) { names = append(names, n) })
+	done, err := g.Decrease(context.Background(), append(names, "foreign"))
+	if len(done) != 1 || err != nil {
+		t.Fatalf("done=%v err=%v", done, err)
+	}
+	done, err = g.Decrease(context.Background(), []string{"foreign"})
+	if len(done) != 0 || err == nil {
+		t.Fatalf("done=%v err=%v", done, err)
 	}
 }

@@ -67,16 +67,18 @@ An unknown key fails Init and names the key.
 | `ssh_credential_name` | `ssh.authorized_keys.root` | systemd credential that carries the public key |
 
 `admit_command` sees `FLEETING_LIBVIRT_NAME`, `FLEETING_LIBVIRT_MEMORY_MIB` and
-`FLEETING_LIBVIRT_VCPU_COUNT`. A refusal makes Increase partial, and fleeting
-asks again later.
+`FLEETING_LIBVIRT_VCPU_COUNT`. A refusal stops Increase; the instances already
+started are returned without an error, and fleeting asks again later.
 
 ## How it behaves
 
 - **Ownership.** A domain is ours when its name starts with `name_prefix` and its
   metadata names our `owner`. Volumes carry no metadata, so they match by the
   owner tag in their name. Update reports only our domains, all as running;
-  a stopped domain fails Heartbeat, which is how fleeting reaches Decrease for
-  it. Update also deletes our volumes that have no domain and no create in
+  a stopped or paused domain is removed only when the caller runs Heartbeat
+  (forgehand with a heartbeat function, or the runner with
+  `FF_USE_FLEETING_ACQUIRE_HEARTBEATS`), which fails and leads to Decrease.
+  Update also deletes our volumes that have no domain and no create in
   flight, and never reports them. Two processes
   stay out of each other's way only with distinct owners.
 - **Keys.** With `use_static_credentials` false, one ed25519 key is generated
@@ -89,7 +91,7 @@ asks again later.
   address, and systemd 255 or later to import the credential.
 - **Address and health.** ConnectInfo waits up to two minutes for the agent's
   address. Heartbeat needs a running domain and an open SSH port.
-- **Connection.** The libvirt connection is dialed once at Init; restart the
-  plugin after restarting libvirtd.
+- **Connection.** The libvirt connection is redialed on the next call after
+  libvirtd drops it.
 - **Removal.** Decrease destroys the domain and deletes the volume, and treats
   missing ones as done.
