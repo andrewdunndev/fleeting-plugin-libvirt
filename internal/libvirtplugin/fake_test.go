@@ -32,9 +32,11 @@ type fakeClient struct {
 	onDomainCreated func(name string)
 	// afterListVolumes runs once ListVolumes has taken its snapshot.
 	afterListVolumes func()
-	closed           bool
-	destroyed        []string
-	deletedVolumes   []string
+	// onCreateDomain runs when a domain start begins.
+	onCreateDomain func()
+	closed         bool
+	destroyed      []string
+	deletedVolumes []string
 }
 
 func newFake() *fakeClient {
@@ -62,7 +64,10 @@ func (f *fakeClient) CreateVolume(_ context.Context, pool, name, xml string) (st
 	return "/pool/" + name + ".qcow2", nil
 }
 
-func (f *fakeClient) DeleteVolume(_ context.Context, _, name string) error {
+func (f *fakeClient) DeleteVolume(ctx context.Context, _, name string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if _, ok := f.volumes[name]; !ok {
@@ -90,6 +95,9 @@ func (f *fakeClient) ListVolumes(_ context.Context, _ string) ([]string, error) 
 }
 
 func (f *fakeClient) CreateDomain(_ context.Context, xml string) error {
+	if f.onCreateDomain != nil {
+		f.onCreateDomain()
+	}
 	if f.createDelay > 0 {
 		time.Sleep(f.createDelay)
 	}

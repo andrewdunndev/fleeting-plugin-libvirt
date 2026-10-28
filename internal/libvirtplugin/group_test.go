@@ -747,3 +747,71 @@ func TestInitWarnsWhenKeyAccountDiffersFromUsername(t *testing.T) {
 		}
 	}
 }
+
+func openFDs(t *testing.T) int {
+	t.Helper()
+	ents, err := os.ReadDir("/dev/fd")
+	if err != nil {
+		t.Skip("no /dev/fd")
+	}
+	return len(ents)
+}
+
+func TestLockReleaseAndCancelledWaitCloseTheirDescriptor(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "lock")
+	before := openFDs(t)
+	for range 5 {
+		unlock, err := acquireLock(context.Background(), path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		unlock()
+	}
+	if got := openFDs(t); got != before {
+		t.Fatalf("release leaked descriptors: %d -> %d", before, got)
+	}
+	unlock, err := acquireLock(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	held := openFDs(t)
+	for range 5 {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		_, err := acquireLock(ctx, path)
+		cancel()
+		if err == nil {
+			t.Fatal("got a held lock")
+		}
+	}
+	if got := openFDs(t); got != held {
+		t.Fatalf("cancelled wait leaked descriptors: %d -> %d", held, got)
+	}
+	unlock()
+}
+
+func TestIncreaseWithCancelledContextCreatesNothing(t *testing.T) {
+	g, f := newGroup(t, baseConfig(), false)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	n, err := g.Increase(ctx, 3)
+	if n != 0 || err == nil {
+		t.Fatalf("Increase = %d, %v", n, err)
+	}
+	if len(f.volumes) != 0 || len(f.domains) != 0 {
+		t.Fatal("cancelled Increase created resources")
+	}
+}
+
+func TestCancelledCreateStillRemovesItsVolume(t *testing.T) {
+	g, f := newGroup(t, baseConfig(), false)
+	ctx, cancel := context.WithCancel(context.Background())
+	f.createErr = errors.New("start interrupted")
+	f.onCreateDomain = cancel
+	n, err := g.Increase(ctx, 1)
+	if n != 0 || err == nil {
+		t.Fatalf("Increase = %d, %v", n, err)
+	}
+	if len(f.volumes) != 0 {
+		t.Fatalf("volume left behind: %v", f.volumes)
+	}
+}
