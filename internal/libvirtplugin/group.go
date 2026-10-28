@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/hashicorp/go-hclog"
@@ -24,6 +25,7 @@ var (
 	pollInterval = time.Second
 	dialTimeout  = 5 * time.Second
 	dialContext  = (&net.Dialer{}).DialContext
+	admitTimeout = 2 * time.Minute
 )
 
 // InstanceGroup implements fleeting's provider.InstanceGroup over libvirt.
@@ -222,9 +224,15 @@ func (g *InstanceGroup) createOne(ctx context.Context) error {
 	return nil
 }
 
-// admit runs admit_command; a non-zero exit refuses this instance.
+// admit runs admit_command; a non-zero exit refuses this instance. It runs
+// under the shared lock, so it is bounded and its whole process group is
+// killed at the deadline.
 func (g *InstanceGroup) admit(ctx context.Context, name string) error {
+	ctx, cancel := context.WithTimeout(ctx, admitTimeout)
+	defer cancel()
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", g.AdmitCommand)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.Env = append(os.Environ(),
 		"FLEETING_LIBVIRT_NAME="+name,
 		"FLEETING_LIBVIRT_MEMORY_MIB="+strconv.Itoa(g.MemoryMiB),
@@ -238,6 +246,9 @@ func (g *InstanceGroup) admit(ctx context.Context, name string) error {
 	msg := strings.TrimSpace(string(out))
 	if len(msg) > 200 {
 		msg = msg[:200]
+	}
+	if ctx.Err() != nil {
+		return fmt.Errorf("admission for %s: admit_command did not finish in %s and was killed: %w", name, admitTimeout, ctx.Err())
 	}
 	return fmt.Errorf("admission refused for %s: admit_command: %w (%s)", name, err, msg)
 }

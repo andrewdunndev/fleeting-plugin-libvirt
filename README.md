@@ -63,7 +63,7 @@ An unknown key fails Init and names the key.
 | `title` | none | domain `<title>`, one line |
 | `resource_partition` | none | cgroup partition such as `/machine/ci`; it must exist |
 | `lock_file` | none | held across admission, volume creation and start of each instance |
-| `admit_command` | none | run with `/bin/sh -c` under the lock; non-zero refuses that instance. Requires `lock_file` |
+| `admit_command` | none | run with `/bin/sh -c` under the lock; non-zero refuses that instance, and it is killed with its children after two minutes. Requires `lock_file` |
 | `ssh_credential_name` | `ssh.authorized_keys.root` | systemd credential that carries the public key |
 
 `admit_command` sees `FLEETING_LIBVIRT_NAME`, `FLEETING_LIBVIRT_MEMORY_MIB` and

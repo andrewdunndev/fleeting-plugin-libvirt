@@ -687,3 +687,35 @@ func TestLockWaitHonoursContext(t *testing.T) {
 	}
 	u2()
 }
+
+func TestHungAdmitCommandIsKilledAndReleasesLock(t *testing.T) {
+	old := admitTimeout
+	admitTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { admitTimeout = old })
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "child-survived")
+	c := baseConfig()
+	c.LockFile = filepath.Join(dir, "lock")
+	c.AdmitCommand = fmt.Sprintf("(sleep 1; touch %s) & sleep 30", marker)
+	g, f := newGroup(t, c, false)
+	start := time.Now()
+	n, err := g.Increase(context.Background(), 1)
+	if n != 0 || err == nil || !strings.Contains(err.Error(), "did not finish") {
+		t.Fatalf("Increase = %d, %v", n, err)
+	}
+	if time.Since(start) > 5*time.Second {
+		t.Fatalf("took %s", time.Since(start))
+	}
+	if len(f.volumes) != 0 || len(f.domains) != 0 {
+		t.Fatal("hung admission created resources")
+	}
+	unlock, err := acquireLock(context.Background(), c.LockFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlock()
+	time.Sleep(1500 * time.Millisecond)
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("admit_command child outlived its kill")
+	}
+}
