@@ -163,15 +163,18 @@ func TestUpdateIgnoresDomainOfAnotherOwnerWithOurPrefix(t *testing.T) {
 	}
 }
 
-func TestOrphanVolumeReportedDeletingAndRemovedByDecrease(t *testing.T) {
+func TestOrphanVolumeIsRunningUnhealthyAndRemovedByDecrease(t *testing.T) {
 	g, f := newGroup(t, baseConfig(), false)
 	orphan := "job-" + ownerTag("job-") + "-deadbeef"
 	f.volumes[orphan] = "<volume/>"
 	f.volumes["job-other-volume"] = "<volume/>"
 	f.volumes["unrelated"] = "<volume/>"
 	got := states(t, g)
-	if len(got) != 1 || got[orphan] != provider.StateDeleting {
+	if len(got) != 1 || got[orphan] != provider.StateRunning {
 		t.Fatalf("Update = %v", got)
+	}
+	if err := g.Heartbeat(context.Background(), orphan); !errors.Is(err, provider.ErrInstanceUnhealthy) {
+		t.Fatalf("orphan heartbeat = %v", err)
 	}
 	done, err := g.Decrease(context.Background(), []string{orphan})
 	if err != nil || len(done) != 1 {
@@ -194,7 +197,7 @@ func TestVolumeBeingCreatedIsNotAnOrphan(t *testing.T) {
 		t.Fatalf("in-flight volume reported: %v", got)
 	}
 	g.untrack(name)
-	if got := states(t, g); got[name] != provider.StateDeleting {
+	if got := states(t, g); got[name] != provider.StateRunning {
 		t.Fatalf("settled orphan not reported: %v", got)
 	}
 }
@@ -413,16 +416,57 @@ func TestInitReportsMaxSize(t *testing.T) {
 	}
 }
 
-func TestStoppedDomainIsReportedDeleting(t *testing.T) {
+func TestStoppedDomainIsRunningAndUnhealthy(t *testing.T) {
 	g, f := newGroup(t, baseConfig(), false)
 	_, _ = g.Increase(context.Background(), 1)
 	for _, d := range f.domains {
 		d.info.Running = false
 	}
-	for _, s := range states(t, g) {
-		if s != provider.StateDeleting {
+	got := states(t, g)
+	if len(got) != 1 {
+		t.Fatalf("states %v", got)
+	}
+	for name, s := range got {
+		if s != provider.StateRunning {
 			t.Fatalf("state %v", s)
 		}
+		if err := g.Heartbeat(context.Background(), name); !errors.Is(err, provider.ErrInstanceUnhealthy) {
+			t.Fatalf("stopped heartbeat = %v", err)
+		}
+	}
+}
+
+func TestUpdateIgnoresDomainOfNestedPrefixWithEqualOwner(t *testing.T) {
+	c := baseConfig()
+	c.Owner = "me"
+	g, f := newGroup(t, c, false)
+	nested, _ := domainXML(domainSpec{Name: "job-ci-1", Prefix: "job-ci-", Owner: "me", Network: "n", DiskPath: "/p", VCPU: 1, MemoryMiB: 1})
+	if err := f.CreateDomain(context.Background(), nested); err != nil {
+		t.Fatal(err)
+	}
+	if got := states(t, g); len(got) != 0 {
+		t.Fatalf("Update saw %v", got)
+	}
+}
+
+func TestCreateFinishingDuringUpdateIsNotAnOrphan(t *testing.T) {
+	g, f := newGroup(t, baseConfig(), false)
+	name, _ := g.newName()
+	g.track(name)
+	f.volumes[name] = "<volume/>"
+	f.afterListVolumes = func() {
+		xml, _ := domainXML(domainSpec{Name: name, Prefix: g.NamePrefix, Owner: g.Owner, Network: "n", DiskPath: "/p", VCPU: 1, MemoryMiB: 1})
+		_ = f.CreateDomain(context.Background(), xml)
+		g.untrack(name)
+	}
+	if got := states(t, g); got[name] != provider.StateRunning || len(got) != 1 {
+		t.Fatalf("got %v", got)
+	}
+	f.afterListVolumes = nil
+	delete(f.domains, name)
+	g.track(name)
+	if got := states(t, g); len(got) != 0 {
+		t.Fatalf("in-flight reported %v", got)
 	}
 }
 

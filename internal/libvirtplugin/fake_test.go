@@ -30,9 +30,11 @@ type fakeClient struct {
 	createDelay time.Duration
 	// onDomainCreated lets a test mirror the domain into a ledger.
 	onDomainCreated func(name string)
-	closed          bool
-	destroyed       []string
-	deletedVolumes  []string
+	// afterListVolumes runs once ListVolumes has taken its snapshot.
+	afterListVolumes func()
+	closed           bool
+	destroyed        []string
+	deletedVolumes   []string
 }
 
 func newFake() *fakeClient {
@@ -79,6 +81,11 @@ func (f *fakeClient) ListVolumes(_ context.Context, _ string) ([]string, error) 
 		out = append(out, n)
 	}
 	sort.Strings(out)
+	if cb := f.afterListVolumes; cb != nil {
+		f.mu.Unlock()
+		cb()
+		f.mu.Lock()
+	}
 	return out, nil
 }
 

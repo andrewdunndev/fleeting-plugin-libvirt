@@ -111,14 +111,25 @@ func (g *InstanceGroup) newName() (string, error) {
 	return g.NamePrefix + ownerTag(g.Owner) + "-" + hex.EncodeToString(b[:]), nil
 }
 
+// Update reports every owned instance as Running, including stopped domains
+// and domainless volumes: fleeting only removes instances whose Heartbeat
+// fails, never ones reported Deleting, so Heartbeat drives their removal.
 func (g *InstanceGroup) Update(ctx context.Context, fn func(instance string, state provider.State)) error {
-	doms, err := g.client.ListDomains(ctx, g.NamePrefix)
-	if err != nil {
-		return fmt.Errorf("listing domains: %w", err)
-	}
 	vols, err := g.client.ListVolumes(ctx, g.PoolName)
 	if err != nil {
 		return fmt.Errorf("listing volumes: %w", err)
+	}
+	// A volume untracked here has finished its create, so its domain is
+	// already visible to the listing that follows.
+	var settled []string
+	for _, v := range vols {
+		if g.ownsName(v) && !g.isInflight(v) {
+			settled = append(settled, v)
+		}
+	}
+	doms, err := g.client.ListDomains(ctx, g.NamePrefix)
+	if err != nil {
+		return fmt.Errorf("listing domains: %w", err)
 	}
 	seen := map[string]bool{}
 	for _, d := range doms {
@@ -126,15 +137,11 @@ func (g *InstanceGroup) Update(ctx context.Context, fn func(instance string, sta
 			continue
 		}
 		seen[d.Name] = true
-		if d.Running {
-			fn(d.Name, provider.StateRunning)
-		} else {
-			fn(d.Name, provider.StateDeleting)
-		}
+		fn(d.Name, provider.StateRunning)
 	}
-	for _, v := range vols {
-		if g.ownsName(v) && !seen[v] && !g.isInflight(v) {
-			fn(v, provider.StateDeleting)
+	for _, v := range settled {
+		if !seen[v] {
+			fn(v, provider.StateRunning)
 		}
 	}
 	return nil
