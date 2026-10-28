@@ -49,7 +49,7 @@ func (g *InstanceGroup) Init(ctx context.Context, log hclog.Logger, settings pro
 	if g.cfgErr != nil {
 		return provider.ProviderInfo{}, g.cfgErr
 	}
-	if err := g.Config.normalize(); err != nil {
+	if err := g.normalize(); err != nil {
 		return provider.ProviderInfo{}, err
 	}
 	g.log = log

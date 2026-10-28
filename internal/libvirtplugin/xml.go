@@ -5,8 +5,6 @@ import (
 	"fmt"
 )
 
-const metadataNS = "urn:fleeting-plugin-libvirt:v1"
-
 type domainSpec struct {
 	Name          string
 	Title         string

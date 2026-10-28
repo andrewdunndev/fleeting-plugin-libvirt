@@ -13,7 +13,6 @@ import (
 type fakeDomain struct {
 	info DomainInfo
 	xml  string
-	addr []string
 }
 
 type fakeClient struct {
@@ -34,7 +33,6 @@ type fakeClient struct {
 	closed          bool
 	destroyed       []string
 	deletedVolumes  []string
-	volSeq          int
 }
 
 func newFake() *fakeClient {

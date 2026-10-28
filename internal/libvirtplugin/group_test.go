@@ -251,7 +251,7 @@ func TestVolumeKeepsBaseCapacityWhenDiskSizeSmaller(t *testing.T) {
 	c := baseConfig()
 	c.DiskSizeGiB = 1
 	g, f := newGroup(t, c, false)
-	g.Increase(context.Background(), 1)
+	_, _ = g.Increase(context.Background(), 1)
 	for _, v := range f.volumes {
 		if !strings.Contains(v, `unit="bytes">10737418240<`) {
 			t.Fatalf("capacity shrank below base: %s", v)
@@ -296,7 +296,7 @@ func TestCustomCredentialName(t *testing.T) {
 	c := baseConfig()
 	c.SSHCredentialName = "ssh.authorized_keys.runner"
 	g, f := newGroup(t, c, false)
-	g.Increase(context.Background(), 1)
+	_, _ = g.Increase(context.Background(), 1)
 	for _, d := range f.domains {
 		if !strings.Contains(d.xml, "io.systemd.credential:ssh.authorized_keys.runner=ssh-ed25519 ") {
 			t.Fatalf("credential name ignored: %s", d.xml)
@@ -314,7 +314,7 @@ func TestStaticCredentialsSeedNothingAndPassKeyThrough(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g.Increase(context.Background(), 1)
+	_, _ = g.Increase(context.Background(), 1)
 	for name, d := range f.domains {
 		if strings.Contains(d.xml, "credential") || strings.Contains(d.xml, "sysinfo") {
 			t.Fatalf("static mode seeded a credential: %s", d.xml)
@@ -328,7 +328,7 @@ func TestStaticCredentialsSeedNothingAndPassKeyThrough(t *testing.T) {
 
 func TestDecreaseIsIdempotent(t *testing.T) {
 	g, f := newGroup(t, baseConfig(), false)
-	g.Increase(context.Background(), 1)
+	_, _ = g.Increase(context.Background(), 1)
 	var name string
 	for n := range f.domains {
 		name = n
@@ -346,7 +346,7 @@ func TestDecreaseIsIdempotent(t *testing.T) {
 
 func TestDecreaseRemovesVolumeWhenDomainAlreadyGone(t *testing.T) {
 	g, f := newGroup(t, baseConfig(), false)
-	g.Increase(context.Background(), 1)
+	_, _ = g.Increase(context.Background(), 1)
 	for n := range f.domains {
 		delete(f.domains, n)
 		if done, err := g.Decrease(context.Background(), []string{n}); err != nil || len(done) != 1 {
@@ -375,7 +375,7 @@ func TestInitAndShutdownDeleteNothing(t *testing.T) {
 	mine := "job-" + ownerTag("job-") + "-aaaaaaaa"
 	f.volumes[mine] = "<volume/>"
 	x, _ := domainXML(domainSpec{Name: mine, Prefix: "job-", Owner: "job-", Network: "n", DiskPath: "/p", VCPU: 1, MemoryMiB: 1})
-	f.CreateDomain(context.Background(), x)
+	_ = f.CreateDomain(context.Background(), x)
 	g := &InstanceGroup{Config: baseConfig(), connect: func(string) (Client, error) { return f, nil }}
 	if _, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{}); err != nil {
 		t.Fatal(err)
@@ -415,7 +415,7 @@ func TestInitReportsMaxSize(t *testing.T) {
 
 func TestStoppedDomainIsReportedDeleting(t *testing.T) {
 	g, f := newGroup(t, baseConfig(), false)
-	g.Increase(context.Background(), 1)
+	_, _ = g.Increase(context.Background(), 1)
 	for _, d := range f.domains {
 		d.info.Running = false
 	}
@@ -429,7 +429,7 @@ func TestStoppedDomainIsReportedDeleting(t *testing.T) {
 func TestConnectInfoWaitsForGuestAgent(t *testing.T) {
 	fastTimers(t)
 	g, f := newGroup(t, baseConfig(), false)
-	g.Increase(context.Background(), 1)
+	_, _ = g.Increase(context.Background(), 1)
 	var name string
 	for n := range f.domains {
 		name = n
@@ -451,7 +451,7 @@ func TestConnectInfoWaitsForGuestAgent(t *testing.T) {
 func TestConnectInfoIsBoundedAndNamesTheFix(t *testing.T) {
 	fastTimers(t)
 	g, f := newGroup(t, baseConfig(), false)
-	g.Increase(context.Background(), 1)
+	_, _ = g.Increase(context.Background(), 1)
 	var name string
 	for n := range f.domains {
 		name = n
@@ -469,7 +469,7 @@ func TestConnectInfoHonoursContext(t *testing.T) {
 	connectWait = time.Minute
 	t.Cleanup(func() { connectWait = cw })
 	g, f := newGroup(t, baseConfig(), false)
-	g.Increase(context.Background(), 1)
+	_, _ = g.Increase(context.Background(), 1)
 	var name string
 	for n := range f.domains {
 		name = n
@@ -498,7 +498,7 @@ func TestConnectInfoFailsFastForMissingDomain(t *testing.T) {
 
 func TestHeartbeatNeedsRunningDomainAndOpenPort(t *testing.T) {
 	g, f := newGroup(t, baseConfig(), false)
-	g.Increase(context.Background(), 1)
+	_, _ = g.Increase(context.Background(), 1)
 	var name string
 	for n := range f.domains {
 		name = n
