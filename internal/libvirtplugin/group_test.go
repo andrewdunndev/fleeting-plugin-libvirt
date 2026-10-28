@@ -370,6 +370,37 @@ func TestDecreaseRefusesNamesItDidNotMint(t *testing.T) {
 	}
 }
 
+func TestDomainOwnershipIsMetadataAndVolumesAreNameTag(t *testing.T) {
+	g, f := newGroup(t, baseConfig(), false)
+	add := func(name, prefix, owner string) {
+		x, _ := domainXML(domainSpec{Name: name, Prefix: prefix, Owner: owner, Network: "n", DiskPath: "/p", VCPU: 1, MemoryMiB: 1})
+		if err := f.CreateDomain(context.Background(), x); err != nil {
+			t.Fatal(err)
+		}
+	}
+	custom := "job-custom"
+	add(custom, g.NamePrefix, g.Owner)
+	f.volumes[custom] = "<volume/>"
+	minted := g.NamePrefix + ownerTag(g.Owner) + "-deadbeef"
+	add(minted, g.NamePrefix, "someone-else")
+
+	got := states(t, g)
+	if len(got) != 1 || got[custom] != provider.StateRunning {
+		t.Fatalf("Update reported %v", got)
+	}
+	done, err := g.Decrease(context.Background(), []string{minted})
+	if err == nil || len(done) != 0 || f.domains[minted] == nil {
+		t.Fatalf("removed a foreign-metadata domain: %v %v", done, err)
+	}
+	done, err = g.Decrease(context.Background(), []string{custom})
+	if err != nil || len(done) != 1 || f.domains[custom] != nil {
+		t.Fatalf("Decrease = %v, %v", done, err)
+	}
+	if _, ok := f.volumes[custom]; !ok {
+		t.Fatal("deleted a volume under a name it did not mint")
+	}
+}
+
 func TestInitAndShutdownDeleteNothing(t *testing.T) {
 	f := newFake()
 	mine := "job-" + ownerTag("job-") + "-aaaaaaaa"

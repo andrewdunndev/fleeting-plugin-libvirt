@@ -142,7 +142,7 @@ func (g *InstanceGroup) Update(ctx context.Context, fn func(instance string, sta
 	}
 	seen := map[string]bool{}
 	for _, d := range doms {
-		if d.Prefix != g.NamePrefix || d.Owner != g.Owner {
+		if !g.ownsDomain(d) {
 			continue
 		}
 		seen[d.Name] = true
@@ -280,21 +280,42 @@ func (g *InstanceGroup) admit(ctx context.Context, name string) error {
 	return fmt.Errorf("%w for %s: admit_command: %v (%s)", errAdmissionRefused, name, err, msg)
 }
 
+// ownsDomain is the one rule for domains: our metadata prefix and owner.
+func (g *InstanceGroup) ownsDomain(d DomainInfo) bool {
+	return d.Prefix == g.NamePrefix && d.Owner == g.Owner
+}
+
+// Decrease removes an instance whose domain carries our metadata, or, when no
+// domain exists, whose name was minted for this owner. A volume is deleted
+// only under a minted name, since volumes carry no metadata.
 func (g *InstanceGroup) Decrease(ctx context.Context, instances []string) ([]string, error) {
+	doms, err := g.client.ListDomains(ctx, g.NamePrefix)
+	if err != nil {
+		return nil, fmt.Errorf("listing domains: %w", err)
+	}
+	listed := map[string]DomainInfo{}
+	for _, d := range doms {
+		listed[d.Name] = d
+	}
 	var done []string
 	var errs []error
 	for _, name := range instances {
-		if !g.ownsName(name) {
+		d, hasDomain := listed[name]
+		if hasDomain && !g.ownsDomain(d) || !hasDomain && !g.ownsName(name) {
 			errs = append(errs, fmt.Errorf("refusing to delete %q: not created by owner %q", name, g.Owner))
 			continue
 		}
-		if err := g.client.DestroyDomain(ctx, name); err != nil && !errors.Is(err, ErrNotFound) {
-			errs = append(errs, fmt.Errorf("destroying domain %s: %w", name, err))
-			continue
+		if hasDomain {
+			if err := g.client.DestroyDomain(ctx, name); err != nil && !errors.Is(err, ErrNotFound) {
+				errs = append(errs, fmt.Errorf("destroying domain %s: %w", name, err))
+				continue
+			}
 		}
-		if err := g.client.DeleteVolume(ctx, g.PoolName, name); err != nil && !errors.Is(err, ErrNotFound) {
-			errs = append(errs, fmt.Errorf("deleting volume %s: %w", name, err))
-			continue
+		if g.ownsName(name) {
+			if err := g.client.DeleteVolume(ctx, g.PoolName, name); err != nil && !errors.Is(err, ErrNotFound) {
+				errs = append(errs, fmt.Errorf("deleting volume %s: %w", name, err))
+				continue
+			}
 		}
 		done = append(done, name)
 	}

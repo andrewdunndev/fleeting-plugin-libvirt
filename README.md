@@ -72,11 +72,13 @@ started are returned without an error, and fleeting asks again later.
 
 ## How it behaves
 
-- **Ownership.** A domain is ours when its name starts with `name_prefix` and its
-  metadata names our `owner`. Volumes carry no metadata, so they match by the
-  owner tag in their name. Update reports only our domains, all as running;
-  a stopped or paused domain is removed only when the caller runs Heartbeat
-  (forgehand with a heartbeat function, or the runner with
+- **Ownership.** A domain is ours when its metadata names our `name_prefix` and
+  `owner`, whatever its name; Update, Decrease and orphan reaping all use that
+  rule. Volumes carry no metadata, so they match by the owner tag in their
+  name: Decrease deletes a volume only under a minted name, and with no domain
+  it removes only minted names. Update reports only our domains, all as
+  running; a stopped or paused domain is removed only when the caller runs
+  Heartbeat (forgehand with a heartbeat function, or the runner with
   `FF_USE_FLEETING_ACQUIRE_HEARTBEATS`), which fails and leads to Decrease.
   Update also deletes our volumes that have no domain and no create in
   flight, and never reports them. Two processes
