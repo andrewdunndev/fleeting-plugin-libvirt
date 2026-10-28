@@ -36,7 +36,8 @@ type Client interface {
 	// CreateDomain defines and starts a transient domain.
 	CreateDomain(ctx context.Context, xml string) error
 	DestroyDomain(ctx context.Context, name string) error
-	ListDomains(ctx context.Context) ([]DomainInfo, error)
+	// ListDomains returns the domains whose name starts with namePrefix.
+	ListDomains(ctx context.Context, namePrefix string) ([]DomainInfo, error)
 	DomainRunning(ctx context.Context, name string) (bool, error)
 	// GuestAddresses returns the addresses the guest agent reports. An agent
 	// that is not up yet is an error, not an empty list.

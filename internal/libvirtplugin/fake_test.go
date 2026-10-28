@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -113,12 +114,14 @@ func (f *fakeClient) DestroyDomain(_ context.Context, name string) error {
 	return nil
 }
 
-func (f *fakeClient) ListDomains(_ context.Context) ([]DomainInfo, error) {
+func (f *fakeClient) ListDomains(_ context.Context, namePrefix string) ([]DomainInfo, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var out []DomainInfo
 	for _, d := range f.domains {
-		out = append(out, d.info)
+		if strings.HasPrefix(d.info.Name, namePrefix) {
+			out = append(out, d.info)
+		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
