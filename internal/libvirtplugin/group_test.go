@@ -719,3 +719,31 @@ func TestHungAdmitCommandIsKilledAndReleasesLock(t *testing.T) {
 		t.Fatal("admit_command child outlived its kill")
 	}
 }
+
+func TestInitWarnsWhenKeyAccountDiffersFromUsername(t *testing.T) {
+	for _, tc := range []struct {
+		username, cred string
+		static, warn   bool
+	}{
+		{"runner", "", false, true},
+		{"", "", false, true},
+		{"root", "", false, false},
+		{"runner", "ssh.authorized_keys.runner", false, false},
+		{"runner", "", true, false},
+	} {
+		var buf strings.Builder
+		c := baseConfig()
+		c.SSHCredentialName = tc.cred
+		g := &InstanceGroup{Config: c, connect: func(string) (Client, error) { return newFake(), nil }}
+		log := hclog.New(&hclog.LoggerOptions{Output: &buf, Level: hclog.Warn})
+		_, err := g.Init(context.Background(), log, provider.Settings{
+			ConnectorConfig: provider.ConnectorConfig{Username: tc.username, UseStaticCredentials: tc.static},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(buf.String(), "different account"); got != tc.warn {
+			t.Errorf("%+v: warned=%v log=%q", tc, got, buf.String())
+		}
+	}
+}

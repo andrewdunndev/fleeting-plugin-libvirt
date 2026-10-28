@@ -14,7 +14,8 @@ import (
 const (
 	defaultURI            = "qemu:///system"
 	defaultNetwork        = "default"
-	defaultCredentialName = "ssh.authorized_keys.root"
+	credentialPrefix      = "ssh.authorized_keys."
+	defaultCredentialName = credentialPrefix + "root"
 	defaultVCPU           = 2
 	defaultMemoryMiB      = 4096
 )

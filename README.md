@@ -75,14 +75,20 @@ asks again later.
 - **Ownership.** A domain is ours when its name starts with `name_prefix` and its
   metadata names our `owner`. Volumes carry no metadata, so they match by the
   owner tag in their name. Update reports only our domains, plus our volumes
-  that have no domain, as deleting so that Decrease removes them.
+  that have no domain, as running. Stopped domains and domainless volumes fail
+  Heartbeat, which is how fleeting reaches Decrease for them. Two processes
+  stay out of each other's way only with distinct owners.
 - **Keys.** With `use_static_credentials` false, one ed25519 key is generated
   at Init; its public half is seeded into each guest as an SMBIOS credential and
-  the private half is returned in ConnectInfo. With it true nothing is seeded
+  the private half is returned in ConnectInfo. The key is per plugin process
+  and is seeded for the account in `ssh_credential_name` (default `root`); Init
+  warns when that account differs from `connector_config.username`. With it true nothing is seeded
   and `connector_config` passes through, so the base image must trust that key.
 - **Guest.** The base image needs the QEMU guest agent, which supplies the
   address, and systemd 255 or later to import the credential.
 - **Address and health.** ConnectInfo waits up to two minutes for the agent's
   address. Heartbeat needs a running domain and an open SSH port.
+- **Connection.** The libvirt connection is dialed once at Init; restart the
+  plugin after restarting libvirtd.
 - **Removal.** Decrease destroys the domain and deletes the volume, and treats
   missing ones as done.

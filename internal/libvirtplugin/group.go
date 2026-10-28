@@ -64,6 +64,10 @@ func (g *InstanceGroup) Init(ctx context.Context, log hclog.Logger, settings pro
 			return provider.ProviderInfo{}, err
 		}
 		g.privatePEM, g.authorized = priv, pub
+		if acct, ok := strings.CutPrefix(g.SSHCredentialName, credentialPrefix); ok && acct != settings.Username {
+			log.Warn("generated key is seeded for a different account than connector_config.username; set ssh_credential_name to match or SSH login will fail",
+				"credential", g.SSHCredentialName, "username", settings.Username)
+		}
 	}
 
 	connect := g.connect
