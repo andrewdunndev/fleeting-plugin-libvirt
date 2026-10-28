@@ -17,6 +17,7 @@ stages:
   - test
   - build
   - release
+  - publish
 
 variables:
   GOFLAGS: -mod=readonly
@@ -33,6 +34,11 @@ include:
       job_name: go-build
       binary_name: fleeting-plugin-libvirt
       package_path: ./cmd/fleeting-plugin-libvirt
+  - component: gitlab.com/dunn.dev/pipeline/release-create@4.13.0
+    inputs:
+      stage: publish
+      package_name: fleeting-plugin-libvirt
+      binary_job: release-oci
 
 # The catalog's lint and audit carry no rules of their own, so the
 # workflow guard above would otherwise skip them on MR pipelines.
