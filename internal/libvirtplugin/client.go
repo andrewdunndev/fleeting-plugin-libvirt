@@ -39,7 +39,8 @@ type Client interface {
 	// ListDomains returns the domains whose name starts with namePrefix.
 	ListDomains(ctx context.Context, namePrefix string) ([]DomainInfo, error)
 	DomainRunning(ctx context.Context, name string) (bool, error)
-	// GuestAddresses returns the addresses the guest agent reports. An agent
-	// that is not up yet is an error, not an empty list.
+	// GuestAddresses returns the addresses the guest agent reports on the
+	// interface carrying the domain's own MAC. An agent that is not up yet is
+	// an error, not an empty list.
 	GuestAddresses(ctx context.Context, name string) ([]string, error)
 }

@@ -261,6 +261,17 @@ func (c *libvirtClient) GuestAddresses(ctx context.Context, name string) ([]stri
 	if err != nil {
 		return nil, err
 	}
+	desc, err := c.cur().DomainGetXMLDesc(d, 0)
+	if hasCode(err, libvirt.ErrNoDomain) {
+		return nil, fmt.Errorf("domain %q: %w", name, ErrNotFound)
+	}
+	if err != nil {
+		return nil, err
+	}
+	mac, err := parseDomainMAC(desc)
+	if err != nil {
+		return nil, err
+	}
 	ifaces, err := c.cur().DomainInterfaceAddresses(d, uint32(libvirt.DomainInterfaceAddressesSrcAgent), 0)
 	if hasCode(err, libvirt.ErrNoDomain) {
 		return nil, fmt.Errorf("domain %q: %w", name, ErrNotFound)
@@ -268,11 +279,21 @@ func (c *libvirtClient) GuestAddresses(ctx context.Context, name string) ([]stri
 	if err != nil {
 		return nil, err
 	}
+	return addressesOfMAC(ifaces, mac), nil
+}
+
+// addressesOfMAC returns the addresses of the guest interface whose hardware
+// address is mac, so that bridges and container networks inside the guest
+// never supply the connect address.
+func addressesOfMAC(ifaces []libvirt.DomainInterface, mac string) []string {
 	var addrs []string
 	for _, i := range ifaces {
+		if len(i.Hwaddr) == 0 || mac == "" || !strings.EqualFold(i.Hwaddr[0], mac) {
+			continue
+		}
 		for _, a := range i.Addrs {
 			addrs = append(addrs, a.Addr)
 		}
 	}
-	return addrs, nil
+	return addrs
 }

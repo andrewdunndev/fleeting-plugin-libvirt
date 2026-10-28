@@ -90,7 +90,9 @@ started are returned without an error, and fleeting asks again later.
 - **Guest.** The base image needs the QEMU guest agent, which supplies the
   address, and systemd 255 or later to import the credential.
 - **Address and health.** ConnectInfo waits up to two minutes for the agent's
-  address. Heartbeat needs a running domain and an open SSH port.
+  address on the interface carrying the domain's MAC (IPv4 first, then global
+  IPv6; never loopback or link-local), so bridges and container networks in
+  the guest are ignored. Heartbeat needs a running domain and an open SSH port.
 - **Connection.** The libvirt connection is redialed on the next call after
   libvirtd drops it.
 - **Removal.** Decrease destroys the domain and deletes the volume, and treats

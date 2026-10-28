@@ -338,13 +338,14 @@ func (g *InstanceGroup) waitAddress(ctx context.Context, name string) (string, e
 	}
 }
 
-// pickAddress prefers a routable IPv4 address over IPv6 and ignores loopback
-// and link-local ones.
+// pickAddress prefers an IPv4 address over a global IPv6 one and ignores
+// loopback and link-local ones. Addresses are those of the instance's own
+// interface.
 func pickAddress(addrs []string) string {
 	var v6 string
 	for _, s := range addrs {
 		a, err := netip.ParseAddr(s)
-		if err != nil || a.IsLoopback() || a.IsLinkLocalUnicast() || a.IsUnspecified() {
+		if err != nil || !a.IsGlobalUnicast() {
 			continue
 		}
 		if a.Is4() {

@@ -260,6 +260,19 @@ func parseDomainXML(s string) (DomainInfo, error) {
 	return DomainInfo{Name: d.Name, Prefix: d.Metadata.Instance.Prefix, Owner: d.Metadata.Instance.Owner}, nil
 }
 
+// parseDomainMAC returns the hardware address of the domain's interface.
+func parseDomainMAC(s string) (string, error) {
+	var d struct {
+		MAC struct {
+			Address string `xml:"address,attr"`
+		} `xml:"devices>interface>mac"`
+	}
+	if err := xml.Unmarshal([]byte(s), &d); err != nil {
+		return "", fmt.Errorf("parsing domain XML: %w", err)
+	}
+	return d.MAC.Address, nil
+}
+
 // parseVolumeFormat returns target/format@type of a volume's XML.
 func parseVolumeFormat(s string) (string, error) {
 	var v struct {

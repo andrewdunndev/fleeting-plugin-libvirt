@@ -84,3 +84,10 @@ func TestParseVolumeFormat(t *testing.T) {
 		t.Fatalf("got %q %v", f, err)
 	}
 }
+
+func TestParseDomainMAC(t *testing.T) {
+	x := `<domain><devices><interface type='network'><mac address='52:54:00:12:34:56'/><source network='default'/></interface></devices></domain>`
+	if got, err := parseDomainMAC(x); err != nil || got != "52:54:00:12:34:56" {
+		t.Fatalf("got %q %v", got, err)
+	}
+}
