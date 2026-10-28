@@ -171,7 +171,7 @@ func (g *InstanceGroup) Increase(ctx context.Context, n int) (int, error) {
 		}
 		if err := g.createOne(ctx); err != nil {
 			errs = append(errs, err)
-			if errors.Is(err, errAdmissionRefused) {
+			if errors.Is(err, errAdmissionRefused) || errors.Is(err, errLockTimedOut) {
 				break
 			}
 			continue

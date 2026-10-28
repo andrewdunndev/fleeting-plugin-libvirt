@@ -682,6 +682,31 @@ func TestLockWaitHonoursContext(t *testing.T) {
 	u2()
 }
 
+func TestLockTimeoutRefusesIncrease(t *testing.T) {
+	old := lockTimeout
+	lockTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { lockTimeout = old })
+	c := baseConfig()
+	c.LockFile = filepath.Join(t.TempDir(), "lock")
+	g, f := newGroup(t, c, false)
+	unlock, err := acquireLock(context.Background(), c.LockFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	n, err := g.Increase(context.Background(), 3)
+	if n != 0 || !errors.Is(err, errLockTimedOut) || time.Since(start) > 2*time.Second {
+		t.Fatalf("Increase = %d, %v after %s", n, err, time.Since(start))
+	}
+	if len(f.volumes) != 0 || len(f.domains) != 0 {
+		t.Fatal("timed-out wait created resources")
+	}
+	unlock()
+	if n, err := g.Increase(context.Background(), 1); n != 1 || err != nil {
+		t.Fatalf("after release Increase = %d, %v", n, err)
+	}
+}
+
 func TestHungAdmitCommandIsKilledAndReleasesLock(t *testing.T) {
 	old := admitTimeout
 	admitTimeout = 200 * time.Millisecond

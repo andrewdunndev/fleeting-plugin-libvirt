@@ -62,7 +62,7 @@ An unknown key fails Init and names the key.
 | `network_name` | `default` | libvirt network for the one interface |
 | `title` | none | domain `<title>`, one line |
 | `resource_partition` | none | cgroup partition such as `/machine/ci`; it must exist |
-| `lock_file` | none | held across admission, volume creation and start of each instance |
+| `lock_file` | none | held across admission, volume creation and start of each instance; waiting longer than five minutes for it refuses that Increase |
 | `admit_command` | none | run with `/bin/sh -c` under the lock; non-zero refuses that instance, and it is killed with its children after two minutes. Requires `lock_file` |
 | `ssh_credential_name` | `ssh.authorized_keys.root` | systemd credential that carries the public key |
 
