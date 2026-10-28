@@ -72,8 +72,9 @@ started are returned without an error, and fleeting asks again later.
 
 ## How it behaves
 
-- **Ownership.** A domain is ours when its metadata names our `name_prefix` and
-  `owner`, whatever its name; Update, Decrease and orphan reaping all use that
+- **Ownership.** Domains are listed by `name_prefix` and
+  owned by metadata: among those, a domain is ours when its metadata names our
+  prefix and `owner`; Update, Decrease and orphan reaping all use that
   rule. Volumes carry no metadata, so they match by the owner tag in their
   name: Decrease deletes a volume only under a minted name, and with no domain
   it removes only minted names. Update reports only our domains, all as

@@ -686,6 +686,7 @@ func TestPickAddress(t *testing.T) {
 		{[]string{"127.0.0.1", "::1", "169.254.1.1", "fe80::1"}, ""},
 		{[]string{"fd00::5"}, "fd00::5"},
 		{[]string{"junk", "0.0.0.0", "192.168.1.4"}, "192.168.1.4"},
+		{[]string{"224.0.0.1", "ff02::1", "255.255.255.255"}, ""},
 	}
 	for _, tc := range tests {
 		if got := pickAddress(tc.in); got != tc.want {
@@ -713,6 +714,49 @@ func TestLockWaitHonoursContext(t *testing.T) {
 	u2()
 }
 
+type lockSwitchClient struct {
+	*fakeClient
+	g    *InstanceGroup
+	held string
+	once sync.Once
+}
+
+func (c *lockSwitchClient) CreateDomain(ctx context.Context, xml string) error {
+	err := c.fakeClient.CreateDomain(ctx, xml)
+	c.once.Do(func() { c.g.LockFile = c.held })
+	return err
+}
+
+func TestLockTimeoutAfterProgressReturnsCount(t *testing.T) {
+	old := lockTimeout
+	lockTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { lockTimeout = old })
+	dir := t.TempDir()
+	held := filepath.Join(dir, "held")
+	unlock, err := acquireLock(context.Background(), held)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+	c := baseConfig()
+	c.LockFile = filepath.Join(dir, "free")
+	f := newFake()
+	cl := &lockSwitchClient{fakeClient: f, held: held}
+	g := &InstanceGroup{Config: c, connect: func(string) (Client, error) { return cl, nil }}
+	cl.g = g
+	if _, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{}); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	n, err := g.Increase(context.Background(), 3)
+	if n != 1 || err != nil || time.Since(start) > 2*lockTimeout+lockTimeout/2 {
+		t.Fatalf("Increase = %d, %v after %s", n, err, time.Since(start))
+	}
+	if len(f.domains) != 1 {
+		t.Fatalf("domains = %d, want 1", len(f.domains))
+	}
+}
+
 func TestLockTimeoutRefusesIncrease(t *testing.T) {
 	old := lockTimeout
 	lockTimeout = 100 * time.Millisecond
@@ -726,7 +770,7 @@ func TestLockTimeoutRefusesIncrease(t *testing.T) {
 	}
 	start := time.Now()
 	n, err := g.Increase(context.Background(), 3)
-	if n != 0 || !errors.Is(err, errLockTimedOut) || time.Since(start) > 2*time.Second {
+	if n != 0 || !errors.Is(err, errLockTimedOut) || time.Since(start) > 2*lockTimeout+lockTimeout/2 {
 		t.Fatalf("Increase = %d, %v after %s", n, err, time.Since(start))
 	}
 	if len(f.volumes) != 0 || len(f.domains) != 0 {

@@ -280,7 +280,7 @@ func (c *libvirtClient) GuestAddresses(ctx context.Context, name string) ([]stri
 func addressesOfMAC(ifaces []libvirt.DomainInterface, mac string) []string {
 	var addrs []string
 	for _, i := range ifaces {
-		if len(i.Hwaddr) == 0 || mac == "" || !strings.EqualFold(i.Hwaddr[0], mac) {
+		if len(i.Hwaddr) == 0 || !strings.EqualFold(i.Hwaddr[0], mac) {
 			continue
 		}
 		for _, a := range i.Addrs {
