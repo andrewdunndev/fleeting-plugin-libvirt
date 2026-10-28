@@ -17,8 +17,7 @@ type Base struct {
 
 // DomainInfo is what Update needs to know about a domain.
 type DomainInfo struct {
-	Name    string
-	Running bool
+	Name string
 	// Prefix and Owner come from the plugin's metadata namespace and are
 	// empty for domains that do not carry it.
 	Prefix string

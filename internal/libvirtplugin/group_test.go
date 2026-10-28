@@ -417,7 +417,7 @@ func TestStoppedDomainIsRunningAndUnhealthy(t *testing.T) {
 	g, f := newGroup(t, baseConfig(), false)
 	_, _ = g.Increase(context.Background(), 1)
 	for _, d := range f.domains {
-		d.info.Running = false
+		d.running = false
 	}
 	got := states(t, g)
 	if len(got) != 1 {
@@ -566,7 +566,7 @@ func TestHeartbeatNeedsRunningDomainAndOpenPort(t *testing.T) {
 		t.Fatal("dialed a stopped domain")
 		return nil, nil
 	}
-	f.domains[name].info.Running = false
+	f.domains[name].running = false
 	if err := g.Heartbeat(context.Background(), name); !errors.Is(err, provider.ErrInstanceUnhealthy) {
 		t.Fatalf("stopped domain healthy: %v", err)
 	}

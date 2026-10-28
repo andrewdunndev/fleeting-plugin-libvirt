@@ -230,15 +230,7 @@ func (c *libvirtClient) ListDomains(ctx context.Context, namePrefix string) ([]D
 		if err != nil {
 			return nil, err
 		}
-		state, _, err := c.cur().DomainGetState(d, 0)
-		if hasCode(err, libvirt.ErrNoDomain) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
 		info.Name = d.Name
-		info.Running = state == int32(libvirt.DomainRunning)
 		out = append(out, info)
 	}
 	return out, nil

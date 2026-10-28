@@ -11,8 +11,9 @@ import (
 )
 
 type fakeDomain struct {
-	info DomainInfo
-	xml  string
+	info    DomainInfo
+	running bool
+	xml     string
 }
 
 type fakeClient struct {
@@ -107,7 +108,7 @@ func (f *fakeClient) CreateDomain(_ context.Context, xml string) error {
 		return f.createErr
 	}
 	d := parseDomainForTest(xml)
-	f.domains[d.Name] = &fakeDomain{info: d, xml: xml}
+	f.domains[d.Name] = &fakeDomain{info: d, xml: xml, running: true}
 	cb := f.onDomainCreated
 	f.mu.Unlock()
 	if cb != nil {
@@ -147,7 +148,7 @@ func (f *fakeClient) DomainRunning(_ context.Context, name string) (bool, error)
 	if !ok {
 		return false, fmt.Errorf("domain %s: %w", name, ErrNotFound)
 	}
-	return d.info.Running, nil
+	return d.running, nil
 }
 
 func (f *fakeClient) GuestAddresses(_ context.Context, name string) ([]string, error) {
@@ -169,6 +170,5 @@ func parseDomainForTest(xml string) DomainInfo {
 	if err != nil {
 		panic(errors.New("fake: " + err.Error()))
 	}
-	d.Running = true
 	return d
 }
