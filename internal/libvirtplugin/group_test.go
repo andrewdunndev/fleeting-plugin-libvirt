@@ -163,42 +163,39 @@ func TestUpdateIgnoresDomainOfAnotherOwnerWithOurPrefix(t *testing.T) {
 	}
 }
 
-func TestOrphanVolumeIsRunningUnhealthyAndRemovedByDecrease(t *testing.T) {
+func TestUpdateDeletesOrphanVolumeAndNeverReportsIt(t *testing.T) {
 	g, f := newGroup(t, baseConfig(), false)
 	orphan := "job-" + ownerTag("job-") + "-deadbeef"
 	f.volumes[orphan] = "<volume/>"
 	f.volumes["job-other-volume"] = "<volume/>"
 	f.volumes["unrelated"] = "<volume/>"
-	got := states(t, g)
-	if len(got) != 1 || got[orphan] != provider.StateRunning {
+	if got := states(t, g); len(got) != 0 {
 		t.Fatalf("Update = %v", got)
-	}
-	if err := g.Heartbeat(context.Background(), orphan); !errors.Is(err, provider.ErrInstanceUnhealthy) {
-		t.Fatalf("orphan heartbeat = %v", err)
-	}
-	done, err := g.Decrease(context.Background(), []string{orphan})
-	if err != nil || len(done) != 1 {
-		t.Fatalf("Decrease: %v %v", done, err)
 	}
 	if _, ok := f.volumes[orphan]; ok {
 		t.Fatal("orphan survived")
 	}
-	if len(f.volumes) != 2 {
-		t.Fatalf("foreign volumes touched: %v", f.volumes)
+	if len(f.volumes) != 2 || len(f.deletedVolumes) != 1 {
+		t.Fatalf("foreign volumes touched: %v %v", f.volumes, f.deletedVolumes)
 	}
 }
 
-func TestVolumeBeingCreatedIsNotAnOrphan(t *testing.T) {
+func TestUpdateKeepsVolumeOfLiveDomainAndInflightCreate(t *testing.T) {
 	g, f := newGroup(t, baseConfig(), false)
+	_, _ = g.Increase(context.Background(), 1)
 	name, _ := g.newName()
 	g.track(name)
 	f.volumes[name] = "<volume/>"
-	if got := states(t, g); len(got) != 0 {
-		t.Fatalf("in-flight volume reported: %v", got)
+	if got := states(t, g); len(got) != 1 {
+		t.Fatalf("Update = %v", got)
+	}
+	if _, ok := f.volumes[name]; !ok || len(f.deletedVolumes) != 0 || len(f.volumes) != 2 {
+		t.Fatalf("volumes %v deleted %v", f.volumes, f.deletedVolumes)
 	}
 	g.untrack(name)
-	if got := states(t, g); got[name] != provider.StateRunning {
-		t.Fatalf("settled orphan not reported: %v", got)
+	states(t, g)
+	if _, ok := f.volumes[name]; ok {
+		t.Fatal("settled orphan survived")
 	}
 }
 
@@ -449,7 +446,7 @@ func TestUpdateIgnoresDomainOfNestedPrefixWithEqualOwner(t *testing.T) {
 	}
 }
 
-func TestCreateFinishingDuringUpdateIsNotAnOrphan(t *testing.T) {
+func TestCreateFinishingDuringUpdateIsNotReaped(t *testing.T) {
 	g, f := newGroup(t, baseConfig(), false)
 	name, _ := g.newName()
 	g.track(name)
@@ -462,11 +459,8 @@ func TestCreateFinishingDuringUpdateIsNotAnOrphan(t *testing.T) {
 	if got := states(t, g); got[name] != provider.StateRunning || len(got) != 1 {
 		t.Fatalf("got %v", got)
 	}
-	f.afterListVolumes = nil
-	delete(f.domains, name)
-	g.track(name)
-	if got := states(t, g); len(got) != 0 {
-		t.Fatalf("in-flight reported %v", got)
+	if _, ok := f.volumes[name]; !ok || len(f.deletedVolumes) != 0 {
+		t.Fatalf("finished create reaped: %v", f.deletedVolumes)
 	}
 }
 

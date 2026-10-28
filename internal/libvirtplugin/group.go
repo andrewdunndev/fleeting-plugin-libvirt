@@ -117,9 +117,10 @@ func (g *InstanceGroup) newName() (string, error) {
 	return g.NamePrefix + ownerTag(g.Owner) + "-" + hex.EncodeToString(b[:]), nil
 }
 
-// Update reports every owned instance as Running, including stopped domains
-// and domainless volumes: fleeting only removes instances whose Heartbeat
-// fails, never ones reported Deleting, so Heartbeat drives their removal.
+// Update reports our domains only; a stopped domain is reported Running so
+// its failing Heartbeat leads fleeting to Decrease, the only path that removes
+// an instance. Our volumes with no domain and no create in flight are deleted
+// here, best effort.
 func (g *InstanceGroup) Update(ctx context.Context, fn func(instance string, state provider.State)) error {
 	vols, err := g.client.ListVolumes(ctx, g.PoolName)
 	if err != nil {
@@ -146,9 +147,14 @@ func (g *InstanceGroup) Update(ctx context.Context, fn func(instance string, sta
 		fn(d.Name, provider.StateRunning)
 	}
 	for _, v := range settled {
-		if !seen[v] {
-			fn(v, provider.StateRunning)
+		if seen[v] {
+			continue
 		}
+		if err := g.client.DeleteVolume(ctx, g.PoolName, v); err != nil && !errors.Is(err, ErrNotFound) {
+			g.log.Warn("deleting orphan volume", "volume", v, "err", err)
+			continue
+		}
+		g.log.Info("deleted orphan volume", "volume", v)
 	}
 	return nil
 }

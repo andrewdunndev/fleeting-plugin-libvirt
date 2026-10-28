@@ -74,9 +74,10 @@ asks again later.
 
 - **Ownership.** A domain is ours when its name starts with `name_prefix` and its
   metadata names our `owner`. Volumes carry no metadata, so they match by the
-  owner tag in their name. Update reports only our domains, plus our volumes
-  that have no domain, as running. Stopped domains and domainless volumes fail
-  Heartbeat, which is how fleeting reaches Decrease for them. Two processes
+  owner tag in their name. Update reports only our domains, all as running;
+  a stopped domain fails Heartbeat, which is how fleeting reaches Decrease for
+  it. Update also deletes our volumes that have no domain and no create in
+  flight, and never reports them. Two processes
   stay out of each other's way only with distinct owners.
 - **Keys.** With `use_static_credentials` false, one ed25519 key is generated
   at Init; its public half is seeded into each guest as an SMBIOS credential and
