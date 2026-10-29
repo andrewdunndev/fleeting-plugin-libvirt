@@ -127,6 +127,8 @@ started are returned without an error, and fleeting asks again later.
 
   ```ini
   [Unit]
+  DefaultDependencies=no
+  After=local-fs.target
   Before=ssh.socket sshd.service
 
   [Service]
