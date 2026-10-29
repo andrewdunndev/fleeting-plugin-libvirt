@@ -5,13 +5,13 @@ import (
 	"testing"
 )
 
-const goldenDomain = `<domain type="kvm"><name>job-a-1</name><title>t</title><metadata><instance xmlns="urn:fleeting-plugin-libvirt:v1"><prefix>job-</prefix><owner>o</owner></instance></metadata><memory unit="MiB">4096</memory><vcpu>2</vcpu><resource><partition>/machine/ci</partition></resource><os><type>hvm</type><smbios mode="sysinfo"></smbios></os><sysinfo type="smbios"><oemStrings><entry>io.systemd.credential:ssh.authorized_keys.root=ssh-ed25519 AAAA</entry></oemStrings></sysinfo><features><acpi></acpi><apic></apic></features><cpu mode="host-passthrough" check="none"></cpu><clock offset="utc"><timer name="rtc" tickpolicy="catchup"></timer><timer name="pit" tickpolicy="delay"></timer><timer name="hpet" present="no"></timer></clock><on_poweroff>destroy</on_poweroff><on_reboot>restart</on_reboot><on_crash>destroy</on_crash><devices><disk type="file" device="disk"><driver name="qemu" type="qcow2"></driver><source file="/p/d.qcow2"></source><target dev="vda" bus="virtio"></target></disk><interface type="network"><source network="runner"></source><model type="virtio"></model></interface><channel type="unix"><target type="virtio" name="org.qemu.guest_agent.0"></target></channel><serial type="pty"><target port="0"></target></serial><console type="pty"><target type="serial" port="0"></target></console><rng model="virtio"><backend model="random">/dev/urandom</backend></rng></devices></domain>`
+const goldenDomain = `<domain type="kvm"><name>job-a-1</name><title>t</title><metadata><instance xmlns="urn:fleeting-plugin-libvirt:v1"><prefix>job-</prefix></instance></metadata><memory unit="MiB">4096</memory><vcpu>2</vcpu><resource><partition>/machine/ci</partition></resource><os><type>hvm</type><smbios mode="sysinfo"></smbios></os><sysinfo type="smbios"><oemStrings><entry>io.systemd.credential:ssh.authorized_keys.root=ssh-ed25519 AAAA</entry></oemStrings></sysinfo><features><acpi></acpi><apic></apic></features><cpu mode="host-passthrough" check="none"></cpu><clock offset="utc"><timer name="rtc" tickpolicy="catchup"></timer><timer name="pit" tickpolicy="delay"></timer><timer name="hpet" present="no"></timer></clock><on_poweroff>destroy</on_poweroff><on_reboot>restart</on_reboot><on_crash>destroy</on_crash><devices><disk type="file" device="disk"><driver name="qemu" type="qcow2"></driver><source file="/p/d.qcow2"></source><target dev="vda" bus="virtio"></target></disk><interface type="network"><source network="runner"></source><model type="virtio"></model></interface><channel type="unix"><target type="virtio" name="org.qemu.guest_agent.0"></target></channel><serial type="pty"><target port="0"></target></serial><console type="pty"><target type="serial" port="0"></target></console><rng model="virtio"><backend model="random">/dev/urandom</backend></rng></devices></domain>`
 
 const goldenVolume = `<volume><name>job-a-1</name><capacity unit="bytes">1073741824</capacity><target><format type="qcow2"></format></target><backingStore><path>/p/b</path><format type="raw"></format></backingStore></volume>`
 
 func fullSpec() domainSpec {
 	return domainSpec{
-		Name: "job-a-1", Title: "t", Prefix: "job-", Owner: "o", Partition: "/machine/ci",
+		Name: "job-a-1", Title: "t", Prefix: "job-", Partition: "/machine/ci",
 		Network: "runner", DiskPath: "/p/d.qcow2", VCPU: 2, MemoryMiB: 4096,
 		CredentialKey: "ssh.authorized_keys.root", AuthorizedKey: "ssh-ed25519 AAAA",
 	}
@@ -69,11 +69,11 @@ func TestParseDomainXMLReadsOwnership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Name != "job-a-1" || info.Prefix != "job-" || info.Owner != "o" {
+	if info.Name != "job-a-1" || info.Prefix != "job-" {
 		t.Fatalf("got %+v", info)
 	}
-	other := `<domain><name>x</name><metadata><instance xmlns="urn:other"><owner>o</owner></instance></metadata></domain>`
-	if info, _ := parseDomainXML(other); info.Owner != "" {
+	other := `<domain><name>x</name><metadata><instance xmlns="urn:other"><prefix>job-</prefix></instance></metadata></domain>`
+	if info, _ := parseDomainXML(other); info.Prefix != "" {
 		t.Fatalf("foreign namespace read as ours: %+v", info)
 	}
 }

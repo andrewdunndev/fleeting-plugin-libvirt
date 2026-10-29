@@ -21,7 +21,7 @@ Run `just lint` and `just test` before opening a merge request.
 ## Conventions
 
 - Errors say what to do next, not only what went wrong.
-- The plugin deletes only what it created for its `owner`, and never at Init or
+- The plugin deletes only what it created under its `name_prefix`, and never at Init or
   Shutdown.
 - Comments are sparse and explain why, never history.
 - Tests assert something that fails when the behavior breaks; check a new test

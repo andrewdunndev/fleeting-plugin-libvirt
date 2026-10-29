@@ -11,8 +11,8 @@ A [fleeting](https://gitlab.com/gitlab-org/fleeting/fleeting) plugin that runs e
 Each instance is a qcow2 overlay on `base_volume_name` plus a transient domain
 that libvirt removes when it stops. The plugin talks to libvirt over its socket
 in pure Go, so the binary is static and needs no libvirt headers. It deletes
-only what it created for its `owner`, and deletes nothing at Init or Shutdown,
-so a restart or a second process with its own `name_prefix` (or `owner`) on
+only what it created under its `name_prefix`, and deletes nothing at Init or Shutdown,
+so a restart or a second process with its own `name_prefix` on
 the same libvirt never destroys a running instance. No hardware is needed to build or test it.
 
 ## Install
@@ -72,7 +72,7 @@ protocol = "ssh"
 username = "runner"
 ```
 
-`name_prefix` must differ from any gitlab-runner's on the same host, and forgehand does not set `owner`. The unit's user needs read and write access to the libvirt socket.
+`name_prefix` must differ from every other daemon's on the same libvirt. The unit's user needs read and write access to the libvirt socket.
 
 ## Configuration
 
@@ -83,9 +83,8 @@ An unknown key fails Init and names the key.
 | `uri` | `qemu:///system` | libvirt URI |
 | `pool_name` | required | storage pool of the base volume and the overlays |
 | `base_volume_name` | required | volume that instances clone |
-| `name_prefix` | required | must end in `-`; every domain and volume is named `<prefix><owner tag>-<id>` |
+| `name_prefix` | required | must end in `-`; every domain and volume is named `<prefix><tag>-<id>` |
 | `max_size` | unbounded | upper bound on instances; the scaler's own cap applies either way |
-| `owner` | `name_prefix` | scopes ownership with the prefix; set it per daemon sharing a prefix, or each deletes the other's VMs |
 | `vcpu_count` | 2 | vCPUs per instance |
 | `memory_mib` | 4096 | memory per instance |
 | `disk_size_gib` | base size | overlay size, never below the base volume |
@@ -101,18 +100,14 @@ started are returned without an error, and fleeting asks again later.
 
 ## How it behaves
 
-- **Ownership.** Domains are listed by `name_prefix` and
-  owned by metadata: among those, a domain is ours when its metadata names our
-  prefix and `owner`; Update, Decrease and orphan reaping all use that
-  rule. Volumes carry no metadata, so they match by the owner tag in their
+- **Ownership.** Domains are listed by `name_prefix`. A domain or volume is ours when it carries our `name_prefix`. Domains match by their metadata prefix; Update, Decrease and orphan reaping all use that rule. Volumes carry no metadata, so they match by a tag derived from the prefix in their
   name: Decrease deletes a volume only under a minted name, and with no domain
   it removes only minted names. Update reports only our domains, all as
   running; a stopped or paused domain is removed only when the caller runs
   Heartbeat (forgehand with a heartbeat function, or the runner with
   `FF_USE_FLEETING_ACQUIRE_HEARTBEATS`), which fails and leads to Decrease.
   Update also deletes our volumes that have no domain and no create in
-  flight, and never reports them. Two processes
-  stay out of each other's way only with distinct owners.
+  flight, and never reports them.
 - **Keys.** With `use_static_credentials` false, one ed25519 key is generated
   at Init; its public half is seeded into each guest as an SMBIOS credential and
   the private half is returned in ConnectInfo. The key is per plugin process

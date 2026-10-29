@@ -9,7 +9,6 @@ type domainSpec struct {
 	Name          string
 	Title         string
 	Prefix        string
-	Owner         string
 	Partition     string
 	Network       string
 	DiskPath      string
@@ -49,7 +48,6 @@ type metadataDoc struct {
 
 type instanceMeta struct {
 	Prefix string `xml:"prefix"`
-	Owner  string `xml:"owner"`
 }
 
 type memoryDoc struct {
@@ -169,7 +167,7 @@ func domainXML(s domainSpec) (string, error) {
 		Type:       "kvm",
 		Name:       s.Name,
 		Title:      s.Title,
-		Metadata:   metadataDoc{Instance: instanceMeta{Prefix: s.Prefix, Owner: s.Owner}},
+		Metadata:   metadataDoc{Instance: instanceMeta{Prefix: s.Prefix}},
 		Memory:     memoryDoc{Unit: "MiB", Value: s.MemoryMiB},
 		VCPU:       s.VCPU,
 		OS:         osDoc{Type: "hvm"},
@@ -257,7 +255,7 @@ func parseDomainXML(s string) (DomainInfo, error) {
 	if err := xml.Unmarshal([]byte(s), &d); err != nil {
 		return DomainInfo{}, fmt.Errorf("parsing domain XML: %w", err)
 	}
-	return DomainInfo{Name: d.Name, Prefix: d.Metadata.Instance.Prefix, Owner: d.Metadata.Instance.Owner}, nil
+	return DomainInfo{Name: d.Name, Prefix: d.Metadata.Instance.Prefix}, nil
 }
 
 // parseDomainMAC returns the hardware address of the domain's interface.

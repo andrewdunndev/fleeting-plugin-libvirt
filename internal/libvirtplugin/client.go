@@ -18,10 +18,9 @@ type Base struct {
 // DomainInfo is what Update needs to know about a domain.
 type DomainInfo struct {
 	Name string
-	// Prefix and Owner come from the plugin's metadata namespace and are
+	// Prefix comes from the plugin's metadata namespace and is
 	// empty for domains that do not carry it.
 	Prefix string
-	Owner  string
 }
 
 // Client is the slice of libvirt the plugin uses.

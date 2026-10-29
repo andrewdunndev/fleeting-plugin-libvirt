@@ -38,7 +38,6 @@ type Config struct {
 	ResourcePartition string `json:"resource_partition"`
 	LockFile          string `json:"lock_file"`
 	AdmitCommand      string `json:"admit_command"`
-	Owner             string `json:"owner"`
 	MaxSize           int    `json:"max_size"`
 }
 
@@ -72,9 +71,6 @@ func (c *Config) normalize() error {
 	if c.MemoryMiB == 0 {
 		c.MemoryMiB = defaultMemoryMiB
 	}
-	if c.Owner == "" {
-		c.Owner = c.NamePrefix
-	}
 
 	switch {
 	case c.PoolName == "":
@@ -99,14 +95,14 @@ func (c *Config) normalize() error {
 	return nil
 }
 
-// ownerTag is the owner's share of an instance name, which is how volumes,
-// having no metadata, are matched to an owner.
-func ownerTag(owner string) string {
-	sum := sha256.Sum256([]byte(owner))
+// prefixTag is the prefix's share of an instance name, which is how volumes,
+// having no metadata, are matched to a prefix even when one nests in another.
+func prefixTag(prefix string) string {
+	sum := sha256.Sum256([]byte(prefix))
 	return hex.EncodeToString(sum[:3])
 }
 
-// ownsName reports whether a domain or volume name was minted for this owner.
+// ownsName reports whether a domain or volume name was minted for this prefix.
 func (c *Config) ownsName(name string) bool {
-	return strings.HasPrefix(name, c.NamePrefix+ownerTag(c.Owner)+"-")
+	return strings.HasPrefix(name, c.NamePrefix+prefixTag(c.NamePrefix)+"-")
 }

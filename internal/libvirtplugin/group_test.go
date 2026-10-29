@@ -149,29 +149,9 @@ func TestAdmitCommandSeesInstanceEnv(t *testing.T) {
 	}
 }
 
-func TestUpdateIgnoresDomainOfAnotherOwnerWithOurPrefix(t *testing.T) {
-	c := baseConfig()
-	c.Owner = "me"
-	g, f := newGroup(t, c, false)
-	if n, _ := g.Increase(context.Background(), 1); n != 1 {
-		t.Fatal("not created")
-	}
-	foreign, _ := domainXML(domainSpec{Name: "job-zzzz-1", Prefix: "job-", Owner: "someone-else", Network: "n", DiskPath: "/p", VCPU: 1, MemoryMiB: 1})
-	if err := f.CreateDomain(context.Background(), foreign); err != nil {
-		t.Fatal(err)
-	}
-	got := states(t, g)
-	if len(got) != 1 {
-		t.Fatalf("Update saw %v", got)
-	}
-	if _, ok := got["job-zzzz-1"]; ok {
-		t.Fatal("foreign domain visible")
-	}
-}
-
 func TestUpdateDeletesOrphanVolumeAndNeverReportsIt(t *testing.T) {
 	g, f := newGroup(t, baseConfig(), false)
-	orphan := "job-" + ownerTag("job-") + "-deadbeef"
+	orphan := "job-" + prefixTag("job-") + "-deadbeef"
 	f.volumes[orphan] = "<volume/>"
 	f.volumes["job-other-volume"] = "<volume/>"
 	f.volumes["unrelated"] = "<volume/>"
@@ -230,7 +210,6 @@ func TestFailedVolumeCreateStartsNothing(t *testing.T) {
 
 func TestIncreaseWritesIdentityAndSizing(t *testing.T) {
 	c := baseConfig()
-	c.Owner = "session-1"
 	c.DiskSizeGiB = 40
 	c.VCPUCount, c.MemoryMiB = 4, 8192
 	g, f := newGroup(t, c, false)
@@ -240,7 +219,7 @@ func TestIncreaseWritesIdentityAndSizing(t *testing.T) {
 	for name, d := range f.domains {
 		for _, want := range []string{
 			"<title>ci</title>", "<partition>/machine/ci</partition>", `<source network="runner">`,
-			"<owner>session-1</owner>", "<vcpu>4</vcpu>", `unit="MiB">8192<`, "org.qemu.guest_agent.0",
+			"<prefix>job-</prefix>", "<vcpu>4</vcpu>", `unit="MiB">8192<`, "org.qemu.guest_agent.0",
 			"<name>" + name + "</name>", `<source file="/pool/` + name + `.qcow2">`,
 		} {
 			if !strings.Contains(d.xml, want) {
@@ -398,17 +377,17 @@ func TestDecreaseRefusesNamesItDidNotMint(t *testing.T) {
 
 func TestDomainOwnershipIsMetadataAndVolumesAreNameTag(t *testing.T) {
 	g, f := newGroup(t, baseConfig(), false)
-	add := func(name, prefix, owner string) {
-		x, _ := domainXML(domainSpec{Name: name, Prefix: prefix, Owner: owner, Network: "n", DiskPath: "/p", VCPU: 1, MemoryMiB: 1})
+	add := func(name, prefix string) {
+		x, _ := domainXML(domainSpec{Name: name, Prefix: prefix, Network: "n", DiskPath: "/p", VCPU: 1, MemoryMiB: 1})
 		if err := f.CreateDomain(context.Background(), x); err != nil {
 			t.Fatal(err)
 		}
 	}
 	custom := "job-custom"
-	add(custom, g.NamePrefix, g.Owner)
+	add(custom, g.NamePrefix)
 	f.volumes[custom] = "<volume/>"
-	minted := g.NamePrefix + ownerTag(g.Owner) + "-deadbeef"
-	add(minted, g.NamePrefix, "someone-else")
+	minted := g.NamePrefix + prefixTag(g.NamePrefix) + "-deadbeef"
+	add(minted, "job-a-")
 
 	got := states(t, g)
 	if len(got) != 1 || got[custom] != provider.StateRunning {
@@ -429,9 +408,9 @@ func TestDomainOwnershipIsMetadataAndVolumesAreNameTag(t *testing.T) {
 
 func TestInitAndShutdownDeleteNothing(t *testing.T) {
 	f := newFake()
-	mine := "job-" + ownerTag("job-") + "-aaaaaaaa"
+	mine := "job-" + prefixTag("job-") + "-aaaaaaaa"
 	f.volumes[mine] = "<volume/>"
-	x, _ := domainXML(domainSpec{Name: mine, Prefix: "job-", Owner: "job-", Network: "n", DiskPath: "/p", VCPU: 1, MemoryMiB: 1})
+	x, _ := domainXML(domainSpec{Name: mine, Prefix: "job-", Network: "n", DiskPath: "/p", VCPU: 1, MemoryMiB: 1})
 	_ = f.CreateDomain(context.Background(), x)
 	g := &InstanceGroup{Config: baseConfig(), connect: func(string) (Client, error) { return f, nil }}
 	if _, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{}); err != nil {
@@ -500,16 +479,37 @@ func TestStoppedDomainIsRunningAndUnhealthy(t *testing.T) {
 	}
 }
 
-func TestUpdateIgnoresDomainOfNestedPrefixWithEqualOwner(t *testing.T) {
-	c := baseConfig()
-	c.Owner = "me"
-	g, f := newGroup(t, c, false)
-	nested, _ := domainXML(domainSpec{Name: "job-ci-1", Prefix: "job-ci-", Owner: "me", Network: "n", DiskPath: "/p", VCPU: 1, MemoryMiB: 1})
-	if err := f.CreateDomain(context.Background(), nested); err != nil {
-		t.Fatal(err)
+func TestNestedPrefixesNeverMatchEachOthersInstances(t *testing.T) {
+	outer := baseConfig()
+	inner := baseConfig()
+	inner.NamePrefix = "job-a-"
+	f := newFake()
+	mk := func(c Config) *InstanceGroup {
+		g := &InstanceGroup{Config: c, connect: func(string) (Client, error) { return f, nil }}
+		if _, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{}); err != nil {
+			t.Fatal(err)
+		}
+		return g
 	}
-	if got := states(t, g); len(got) != 0 {
-		t.Fatalf("Update saw %v", got)
+	outerG, innerG := mk(outer), mk(inner)
+	if n, _ := innerG.Increase(context.Background(), 1); n != 1 {
+		t.Fatal("not created")
+	}
+	var theirs string
+	for n := range f.domains {
+		theirs = n
+	}
+	orphan := inner.NamePrefix + prefixTag(inner.NamePrefix) + "-deadbeef"
+	f.volumes[orphan] = "<volume/>"
+	if got := states(t, outerG); len(got) != 0 {
+		t.Fatalf("outer Update saw %v", got)
+	}
+	if _, ok := f.volumes[orphan]; !ok || len(f.deletedVolumes) != 0 {
+		t.Fatalf("outer reaped the inner prefix's volume: %v", f.deletedVolumes)
+	}
+	done, err := outerG.Decrease(context.Background(), []string{theirs, orphan})
+	if err == nil || len(done) != 0 || f.domains[theirs] == nil || f.volumes[theirs] == "" {
+		t.Fatalf("outer removed the inner prefix's instance: %v %v", done, err)
 	}
 }
 
@@ -519,7 +519,7 @@ func TestCreateFinishingDuringUpdateIsNotReaped(t *testing.T) {
 	g.track(name)
 	f.volumes[name] = "<volume/>"
 	f.afterListVolumes = func() {
-		xml, _ := domainXML(domainSpec{Name: name, Prefix: g.NamePrefix, Owner: g.Owner, Network: "n", DiskPath: "/p", VCPU: 1, MemoryMiB: 1})
+		xml, _ := domainXML(domainSpec{Name: name, Prefix: g.NamePrefix, Network: "n", DiskPath: "/p", VCPU: 1, MemoryMiB: 1})
 		_ = f.CreateDomain(context.Background(), xml)
 		g.untrack(name)
 	}
@@ -739,7 +739,7 @@ func TestConfigDefaults(t *testing.T) {
 	if err := c.normalize(); err != nil {
 		t.Fatal(err)
 	}
-	if c.URI != "qemu:///system" || c.Owner != "job-" || c.NetworkName != "default" ||
+	if c.URI != "qemu:///system" || c.NetworkName != "default" ||
 		c.VCPUCount != 2 || c.MemoryMiB != 4096 {
 		t.Fatalf("%+v", c)
 	}
@@ -1058,5 +1058,26 @@ func TestLockCreatesMissingFile(t *testing.T) {
 	unlock()
 	if _, err := os.Stat(path); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestOwnerKeyIsRejectedAsUnknown(t *testing.T) {
+	raw := `{"pool_name":"p","base_volume_name":"b","name_prefix":"job-","max_size":1,"owner":"x"}`
+	g := &InstanceGroup{connect: func(string) (Client, error) { return newFake(), nil }}
+	if err := json.Unmarshal([]byte(raw), g); err != nil {
+		t.Fatal(err)
+	}
+	_, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{})
+	if err == nil || !strings.Contains(err.Error(), "owner") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestInitGroupIDIsPoolAndPrefix(t *testing.T) {
+	f := newFake()
+	g := &InstanceGroup{Config: baseConfig(), connect: func(string) (Client, error) { return f, nil }}
+	info, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{})
+	if err != nil || info.ID != "libvirt/pool/job-" {
+		t.Fatalf("ID = %q, %v", info.ID, err)
 	}
 }

@@ -19,8 +19,8 @@ disclosure date within thirty days. Please do not open a public issue first.
 
 ## In scope
 
-- Destroying or deleting a domain or volume that the plugin did not create for
-  its `owner`.
+- Destroying or deleting a domain or volume that the plugin did not create under
+  its `name_prefix`.
 - Leaking the generated private key through logs, errors or the domain XML.
 - Starting a VM without taking `lock_file` or running `admit_command` when they
   are configured.

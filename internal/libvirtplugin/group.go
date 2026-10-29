@@ -87,7 +87,7 @@ func (g *InstanceGroup) Init(ctx context.Context, log hclog.Logger, settings pro
 	g.client = client
 
 	return provider.ProviderInfo{
-		ID:      "libvirt/" + g.PoolName + "/" + g.Owner,
+		ID:      "libvirt/" + g.PoolName + "/" + g.NamePrefix,
 		MaxSize: cmp.Or(g.MaxSize, unboundedSize),
 	}, nil
 }
@@ -118,7 +118,7 @@ func (g *InstanceGroup) newName() (string, error) {
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", err
 	}
-	return g.NamePrefix + ownerTag(g.Owner) + "-" + hex.EncodeToString(b[:]), nil
+	return g.NamePrefix + prefixTag(g.NamePrefix) + "-" + hex.EncodeToString(b[:]), nil
 }
 
 // Update reports our domains only, all as Running: Decrease is the only path
@@ -231,7 +231,7 @@ func (g *InstanceGroup) createOne(ctx context.Context) error {
 	}
 
 	spec := domainSpec{
-		Name: name, Title: g.Title, Prefix: g.NamePrefix, Owner: g.Owner,
+		Name: name, Title: g.Title, Prefix: g.NamePrefix,
 		Partition: g.ResourcePartition, Network: g.NetworkName, DiskPath: path,
 		VCPU: g.VCPUCount, MemoryMiB: g.MemoryMiB,
 	}
@@ -282,13 +282,13 @@ func (g *InstanceGroup) admit(ctx context.Context, name string) error {
 	return fmt.Errorf("%w for %s: admit_command: %v (%s)", errAdmissionRefused, name, err, msg)
 }
 
-// ownsDomain is the one rule for domains: our metadata prefix and owner.
+// ownsDomain is the one rule for domains: our metadata prefix.
 func (g *InstanceGroup) ownsDomain(d DomainInfo) bool {
-	return d.Prefix == g.NamePrefix && d.Owner == g.Owner
+	return d.Prefix == g.NamePrefix
 }
 
 // Decrease removes an instance whose domain carries our metadata, or, when no
-// domain exists, whose name was minted for this owner. A volume is deleted
+// domain exists, whose name was minted for this prefix. A volume is deleted
 // only under a minted name, since volumes carry no metadata.
 func (g *InstanceGroup) Decrease(ctx context.Context, instances []string) ([]string, error) {
 	doms, err := g.client.ListDomains(ctx, g.NamePrefix)
@@ -304,7 +304,7 @@ func (g *InstanceGroup) Decrease(ctx context.Context, instances []string) ([]str
 	for _, name := range instances {
 		d, hasDomain := listed[name]
 		if hasDomain && !g.ownsDomain(d) || !hasDomain && !g.ownsName(name) {
-			errs = append(errs, fmt.Errorf("refusing to delete %q: not created by owner %q", name, g.Owner))
+			errs = append(errs, fmt.Errorf("refusing to delete %q: not created under prefix %q", name, g.NamePrefix))
 			continue
 		}
 		if hasDomain {
