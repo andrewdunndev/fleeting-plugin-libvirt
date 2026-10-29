@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -464,6 +465,16 @@ func TestInitReportsMaxSize(t *testing.T) {
 	}
 }
 
+func TestUnsetMaxSizeIsUnbounded(t *testing.T) {
+	c := baseConfig()
+	c.MaxSize = 0
+	g := &InstanceGroup{Config: c, connect: func(string) (Client, error) { return newFake(), nil }}
+	info, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{})
+	if err != nil || info.MaxSize != math.MaxInt32 {
+		t.Fatalf("%+v %v", info, err)
+	}
+}
+
 func TestStoppedDomainIsRunningAndUnhealthy(t *testing.T) {
 	g, f := newGroup(t, baseConfig(), false)
 	_, _ = g.Increase(context.Background(), 1)
@@ -647,7 +658,7 @@ func TestConfigValidation(t *testing.T) {
 		{"prefix missing", func(c *Config) { c.NamePrefix = "" }, "name_prefix"},
 		{"prefix no dash", func(c *Config) { c.NamePrefix = "job" }, "end in '-'"},
 		{"prefix slash", func(c *Config) { c.NamePrefix = "a/b-" }, "name_prefix"},
-		{"max_size", func(c *Config) { c.MaxSize = 0 }, "max_size"},
+		{"max_size negative", func(c *Config) { c.MaxSize = -1 }, "max_size"},
 		{"negative", func(c *Config) { c.MemoryMiB = -1 }, "negative"},
 		{"admit without lock", func(c *Config) { c.AdmitCommand = "true" }, "lock_file"},
 		{"multiline title", func(c *Config) { c.Title = "a\nb" }, "title"},

@@ -37,7 +37,6 @@ Set `FLEETING_PLUGIN_PATH` to the same directory when you install and when you r
     pool_name = "images"
     base_volume_name = "golden.qcow2"
     name_prefix = "ci-"
-    max_size = 4
 
   [runners.autoscaler.connector_config]
     username = "root"
@@ -58,7 +57,7 @@ An unknown key fails Init and names the key.
 | `pool_name` | required | storage pool of the base volume and the overlays |
 | `base_volume_name` | required | volume that instances clone |
 | `name_prefix` | required | must end in `-`; every domain and volume is named `<prefix><owner tag>-<id>` |
-| `max_size` | required | upper bound on instances |
+| `max_size` | unbounded | upper bound on instances; the scaler's own cap applies either way |
 | `owner` | `name_prefix` | scopes ownership with the prefix; set it per daemon sharing a prefix, or each deletes the other's VMs |
 | `vcpu_count` | 2 | vCPUs per instance |
 | `memory_mib` | 4096 | memory per instance |

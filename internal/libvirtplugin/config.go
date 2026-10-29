@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 )
@@ -17,6 +18,7 @@ const (
 	credentialPrefix = "ssh.authorized_keys."
 	defaultVCPU      = 2
 	defaultMemoryMiB = 4096
+	unboundedSize    = math.MaxInt32
 )
 
 var prefixPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*-$`)
@@ -83,8 +85,8 @@ func (c *Config) normalize() error {
 		return errors.New("plugin_config.name_prefix is required: it scopes every domain and volume this plugin may touch")
 	case !prefixPattern.MatchString(c.NamePrefix):
 		return fmt.Errorf("plugin_config.name_prefix %q must start with a letter or digit, use only letters, digits, '.', '_' and '-', and end in '-'", c.NamePrefix)
-	case c.MaxSize <= 0:
-		return errors.New("plugin_config.max_size must be greater than 0: fleeting caps max_instances by it")
+	case c.MaxSize < 0:
+		return errors.New("plugin_config.max_size must not be negative; leave it unset for no limit")
 	case c.VCPUCount < 0 || c.MemoryMiB < 0 || c.DiskSizeGiB < 0:
 		return errors.New("plugin_config vcpu_count, memory_mib and disk_size_gib must not be negative")
 	case c.AdmitCommand != "" && c.LockFile == "":

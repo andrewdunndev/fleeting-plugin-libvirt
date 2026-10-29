@@ -88,7 +88,7 @@ func (g *InstanceGroup) Init(ctx context.Context, log hclog.Logger, settings pro
 
 	return provider.ProviderInfo{
 		ID:      "libvirt/" + g.PoolName + "/" + g.Owner,
-		MaxSize: g.MaxSize,
+		MaxSize: cmp.Or(g.MaxSize, unboundedSize),
 	}, nil
 }
 
