@@ -92,7 +92,7 @@ An unknown key fails Init and names the key.
 | `network_name` | `default` | libvirt network for the one interface |
 | `title` | none | domain `<title>`, one line |
 | `resource_partition` | none | cgroup partition such as `/machine/ci`; it must exist |
-| `lock_file` | none | held across admission, volume creation and start of each instance; waiting longer than five minutes for it refuses that Increase |
+| `lock_file` | none | held across admission, volume creation and start of each instance; waiting longer than five minutes for it refuses that Increase. Use a directory that is not sticky and world-writable (for example under `/run`), shared by every account that runs the plugin |
 | `admit_command` | none | run with `/bin/sh -c` under the lock; non-zero refuses that instance, and it is killed with its children after two minutes. Requires `lock_file` |
 
 `admit_command` sees `FLEETING_LIBVIRT_NAME`, `FLEETING_LIBVIRT_MEMORY_MIB` and
@@ -120,7 +120,25 @@ started are returned without an error, and fleeting asks again later.
   when empty). With it true nothing is seeded
   and `connector_config` passes through, so the base image must trust that key.
 - **Guest.** The base image needs the QEMU guest agent, which supplies the
-  address, and systemd 255 or later to import the credential. A non-root SSH account needs a tmpfiles line that imports its own credential, because systemd's stock `provision.conf` imports only `ssh.authorized_keys.root`; it must import `ssh.authorized_keys.<username>`.
+  address, and systemd to import the credential. systemd's stock
+  `provision.conf` imports only `ssh.authorized_keys.root`, so a non-root SSH
+  account needs a oneshot unit that imports its own credential and writes the
+  file before sshd starts (shown for `username = "runner"`):
+
+  ```ini
+  [Unit]
+  Before=ssh.socket sshd.service
+
+  [Service]
+  Type=oneshot
+  RemainAfterExit=yes
+  ImportCredential=ssh.authorized_keys.runner
+  ExecStart=/bin/sh -c 'install -d -m 700 -o runner -g runner /home/runner/.ssh && install -m 600 -o runner -g runner "$CREDENTIALS_DIRECTORY/ssh.authorized_keys.runner" /home/runner/.ssh/authorized_keys'
+
+  [Install]
+  WantedBy=multi-user.target
+  ```
+
 - **Address and health.** ConnectInfo waits up to two minutes for the agent's
   address on the interface carrying the domain's MAC (IPv4 first, then global
   IPv6; never loopback or link-local), so bridges and container networks in
