@@ -1,0 +1,18 @@
+<svg viewBox="0 0 256 256" width="256" height="256" font-family="Helvetica, Arial, sans-serif" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="fleeting-plugin-libvirt avatar: Clone, run one job, vanish.">
+  <g font-family="Helvetica, Arial, sans-serif">
+  <rect x="0" y="0" width="256" height="256" fill="#ffffff"/>
+  <rect x="0" y="0" width="256" height="256" fill="none" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="128" y="38" text-anchor="middle" font-size="11" font-weight="600" fill="#707070" letter-spacing="1.2">FLEETING PLUGIN</text>
+  <text x="128" y="66" text-anchor="middle" font-size="32" font-weight="700" fill="#4a6741">libvirt</text>
+  <text x="128" y="82" text-anchor="middle" font-size="10" fill="#707070">Clone, run one job, vanish.</text>
+  <g transform="translate(80 100) scale(1.5)">
+  <path d="M25 3 L39 3 C 45 3, 47 8, 47 14 C 47 26, 50 34, 50 42 L14 42 C 14 34, 17 26, 17 14 C 17 8, 19 3, 25 3 Z" fill="none" stroke="#4a6741" stroke-width="2" stroke-linejoin="round"/>
+  <line x1="12" y1="42" x2="52" y2="42" stroke="#4a6741" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M32 24 C 29 29, 27 32, 27.5 35.5 Q 32 40.5, 36.5 35.5 C 37 32, 35 29, 32 24 Z" fill="#4a6741"/>
+  <line x1="32" y1="48" x2="32" y2="58" stroke="#4a6741" stroke-width="1.4" stroke-linecap="round"/>
+  </g>
+  <line x1="40" y1="200" x2="216" y2="200" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="128" y="218" text-anchor="middle" font-size="9" font-weight="600" fill="#0a0a0a">one overlay · one domain · gone</text>
+  <text x="128" y="232" text-anchor="middle" font-size="8" fill="#707070">GO · MIT · PRE-RELEASE</text>
+  </g>
+</svg>

@@ -7,3 +7,6 @@ build:
 lint:
     golangci-lint run ./...
     go vet ./...
+
+brand:
+    bash ~/gitlab.com/dunn.dev/reference/repository/scripts/brand.sh

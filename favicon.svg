@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="fleeting-plugin-libvirt: lantern glyph.">
+  <path d="M25 3 L39 3 C 45 3, 47 8, 47 14 C 47 26, 50 34, 50 42 L14 42 C 14 34, 17 26, 17 14 C 17 8, 19 3, 25 3 Z" fill="none" stroke="#4a6741" stroke-width="3.6" stroke-linejoin="round"/>
+  <line x1="12" y1="42" x2="52" y2="42" stroke="#4a6741" stroke-width="5.5" stroke-linecap="round"/>
+  <path d="M32 24 C 29 29, 27 32, 27.5 35.5 Q 32 40.5, 36.5 35.5 C 37 32, 35 29, 32 24 Z" fill="#4a6741"/>
+  <line x1="32" y1="48" x2="32" y2="58" stroke="#4a6741" stroke-width="2.6" stroke-linecap="round"/>
+</svg>

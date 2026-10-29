@@ -1,0 +1,44 @@
+<svg viewBox="0 0 1200 430" width="1200" height="430" font-family="IBM Plex Sans, Helvetica, Arial, sans-serif" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="fleeting-plugin-libvirt hero: Clone, run one job, vanish.">
+  <rect x="0" y="0" width="1200" height="430" fill="#f4f4f4"/>
+  <g font-family="IBM Plex Sans, Helvetica, Arial, sans-serif">
+  <text x="60" y="34" font-size="10" font-weight="600" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="1.4">FLEETING PLUGIN · LIBVIRT · QEMU</text>
+  <text x="1140" y="34" text-anchor="end" font-size="10" font-weight="600" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="1.4">2026</text>
+  <line x1="60" y1="48" x2="1140" y2="48" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="60" y="110" font-size="30" font-weight="700" fill="#4a6741" letter-spacing="-1">fleeting-plugin-</text>
+  <text x="60" y="166" font-size="72" font-weight="700" fill="#4a6741" letter-spacing="-2">libvirt</text>
+  <text x="60" y="196" font-size="14" fill="#404040">Runs each fleeting instance as a libvirt VM cloned from one base volume.</text>
+  <text x="60" y="216" font-size="14" fill="#404040">Pure Go over the libvirt socket, one static binary.</text>
+  <text x="60" y="244" font-size="12" font-style="italic" fill="#404040">Clone, run one job, vanish.</text>
+  <g transform="translate(110 250) scale(2.0)">
+  <path d="M25 3 L39 3 C 45 3, 47 8, 47 14 C 47 26, 50 34, 50 42 L14 42 C 14 34, 17 26, 17 14 C 17 8, 19 3, 25 3 Z" fill="none" stroke="#4a6741" stroke-width="2" stroke-linejoin="round"/>
+  <line x1="12" y1="42" x2="52" y2="42" stroke="#4a6741" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M32 24 C 29 29, 27 32, 27.5 35.5 Q 32 40.5, 36.5 35.5 C 37 32, 35 29, 32 24 Z" fill="#4a6741"/>
+  <line x1="32" y1="48" x2="32" y2="58" stroke="#4a6741" stroke-width="1.4" stroke-linecap="round"/>
+  </g>
+  <text x="560" y="72" font-size="10" font-weight="700" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="1.4">FLOW</text>
+  <text x="850" y="72" font-size="10" font-weight="700" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="1.4">DISCIPLINE</text>
+  <rect x="560" y="84" width="270" height="130" rx="3" fill="#ffffff" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="578" y="106" font-size="10" font-weight="700" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="1.4">BASE</text>
+  <text x="578" y="152" font-size="32" font-weight="700" fill="#4a6741" letter-spacing="-0.5">clone</text>
+  <text x="578" y="178" font-size="11" fill="#404040">A qcow2 overlay on one base volume.</text>
+  <text x="578" y="200" font-size="9" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="0.6">QCOW2 · BASE VOLUME</text>
+  <rect x="850" y="84" width="270" height="130" rx="3" fill="#ffffff" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="868" y="106" font-size="10" font-weight="700" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="1.4">OWNER</text>
+  <text x="868" y="152" font-size="32" font-weight="700" fill="#4a6741" letter-spacing="-0.5">scoped</text>
+  <text x="868" y="178" font-size="11" fill="#404040">Deletes only what it created, never at Init.</text>
+  <text x="868" y="200" font-size="9" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="0.6">OWNER TAG · NO SWEEP</text>
+  <rect x="560" y="224" width="270" height="130" rx="3" fill="#ffffff" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="578" y="246" font-size="10" font-weight="700" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="1.4">SOCKET</text>
+  <text x="578" y="292" font-size="32" font-weight="700" fill="#4a6741" letter-spacing="-0.5">pure go</text>
+  <text x="578" y="318" font-size="11" fill="#404040">Static binary, no libvirt headers.</text>
+  <text x="578" y="340" font-size="9" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="0.6">LIBVIRT RPC · NO CGO</text>
+  <rect x="850" y="224" width="270" height="130" rx="3" fill="#ffffff" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="868" y="246" font-size="10" font-weight="700" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="1.4">LIFETIME</text>
+  <text x="868" y="292" font-size="32" font-weight="700" fill="#4a6741" letter-spacing="-0.5">transient</text>
+  <text x="868" y="318" font-size="11" fill="#404040">libvirt drops the domain when it stops.</text>
+  <text x="868" y="340" font-size="9" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="0.6">SINGLE-USE · NO REUSE</text>
+  <line x1="60" y1="386" x2="1140" y2="386" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="60" y="412" font-size="10" font-weight="600" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="1.4">GO · FLEETING · LIBVIRT · MIT</text>
+  <text x="1140" y="412" text-anchor="end" font-size="10" font-weight="600" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="1.4">GITLAB.COM/DUNN.DEV/FLEETING-PLUGIN-LIBVIRT</text>
+  </g>
+</svg>

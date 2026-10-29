@@ -1,3 +1,5 @@
+![hero](hero.svg)
+
 # fleeting-plugin-libvirt
 
 [![pipeline](https://gitlab.com/dunn.dev/fleeting-plugin-libvirt/badges/main/pipeline.svg)](https://gitlab.com/dunn.dev/fleeting-plugin-libvirt/-/pipelines)
