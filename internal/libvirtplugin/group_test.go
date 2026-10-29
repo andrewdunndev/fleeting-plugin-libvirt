@@ -41,9 +41,14 @@ func newGroup(t *testing.T, c Config, static bool) (*InstanceGroup, *fakeClient)
 
 func fastTimers(t *testing.T) {
 	t.Helper()
-	cw, pi := connectWait, pollInterval
+	cw, pi, dc := connectWait, pollInterval, dialContext
 	connectWait, pollInterval = 300*time.Millisecond, 5*time.Millisecond
-	t.Cleanup(func() { connectWait, pollInterval = cw, pi })
+	dialContext = func(context.Context, string, string) (net.Conn, error) {
+		c, s := net.Pipe()
+		_ = s.Close()
+		return c, nil
+	}
+	t.Cleanup(func() { connectWait, pollInterval, dialContext = cw, pi, dc })
 }
 
 func states(t *testing.T, g *InstanceGroup) map[string]provider.State {
@@ -560,6 +565,53 @@ func TestConnectInfoIsBoundedAndNamesTheFix(t *testing.T) {
 	start := time.Now()
 	_, err := g.ConnectInfo(context.Background(), name)
 	if err == nil || !strings.Contains(err.Error(), "qemu-guest-agent") || time.Since(start) > 5*time.Second {
+		t.Fatalf("err=%v after %s", err, time.Since(start))
+	}
+}
+
+func TestConnectInfoWaitsForSSHPort(t *testing.T) {
+	fastTimers(t)
+	g, f := newGroup(t, baseConfig(), false)
+	_, _ = g.Increase(context.Background(), 1)
+	var name string
+	for n := range f.domains {
+		name = n
+	}
+	var mu sync.Mutex
+	var tries int
+	var dialed string
+	dialContext = func(_ context.Context, _, addr string) (net.Conn, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		tries++
+		dialed = addr
+		if tries < 4 {
+			return nil, errors.New("refused")
+		}
+		c, s := net.Pipe()
+		_ = s.Close()
+		return c, nil
+	}
+	info, err := g.ConnectInfo(context.Background(), name)
+	mu.Lock()
+	defer mu.Unlock()
+	if err != nil || info.InternalAddr != "10.1.2.3" || tries != 4 || dialed != "10.1.2.3:22" {
+		t.Fatalf("info=%+v err=%v tries=%d dialed=%q", info, err, tries, dialed)
+	}
+}
+
+func TestConnectInfoFailsWhenSSHPortNeverOpens(t *testing.T) {
+	fastTimers(t)
+	g, f := newGroup(t, baseConfig(), false)
+	_, _ = g.Increase(context.Background(), 1)
+	var name string
+	for n := range f.domains {
+		name = n
+	}
+	dialContext = func(context.Context, string, string) (net.Conn, error) { return nil, errors.New("refused") }
+	start := time.Now()
+	_, err := g.ConnectInfo(context.Background(), name)
+	if err == nil || !strings.Contains(err.Error(), "ssh port") || time.Since(start) > 3*time.Second {
 		t.Fatalf("err=%v after %s", err, time.Since(start))
 	}
 }

@@ -329,17 +329,51 @@ func (g *InstanceGroup) ConnectInfo(ctx context.Context, instance string) (provi
 	if !g.settings.UseStaticCredentials {
 		info.Key = g.privatePEM
 	}
+	ctx, cancel := context.WithTimeout(ctx, connectWait)
+	defer cancel()
 	addr, err := g.waitAddress(ctx, instance)
 	if err != nil {
+		return info, err
+	}
+	if err := g.waitPort(ctx, instance, addr); err != nil {
 		return info, err
 	}
 	info.InternalAddr, info.ExternalAddr = addr, addr
 	return info, nil
 }
 
-func (g *InstanceGroup) waitAddress(ctx context.Context, name string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, connectWait)
+// waitPort holds ConnectInfo back until the guest's SSH port accepts a
+// connection, so a returned instance is one the connector can reach.
+func (g *InstanceGroup) waitPort(ctx context.Context, name, addr string) error {
+	for {
+		err := g.dialSSH(ctx, addr)
+		if err == nil {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("ssh port of %s at %s not open: %w (last: %v); check that sshd runs in the base image and protocol_port matches", name, addr, ctx.Err(), err)
+		case <-time.After(pollInterval):
+		}
+	}
+}
+
+// dialSSH opens and closes one TCP connection to the guest's SSH port.
+func (g *InstanceGroup) dialSSH(ctx context.Context, addr string) error {
+	port := g.settings.ProtocolPort
+	if port == 0 {
+		port = 22
+	}
+	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
+	conn, err := dialContext(ctx, "tcp", net.JoinHostPort(addr, strconv.Itoa(port)))
+	if err != nil {
+		return err
+	}
+	return conn.Close()
+}
+
+func (g *InstanceGroup) waitAddress(ctx context.Context, name string) (string, error) {
 	var last error
 	for {
 		addrs, err := g.client.GuestAddresses(ctx, name)
@@ -397,17 +431,10 @@ func (g *InstanceGroup) Heartbeat(ctx context.Context, instance string) error {
 	if addr == "" {
 		return fmt.Errorf("%w: no address for %s", provider.ErrInstanceUnhealthy, instance)
 	}
-	port := g.settings.ProtocolPort
-	if port == 0 {
-		port = 22
-	}
-	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
-	defer cancel()
-	conn, err := dialContext(dctx, "tcp", net.JoinHostPort(addr, strconv.Itoa(port)))
-	if err != nil {
+	if err := g.dialSSH(ctx, addr); err != nil {
 		return fmt.Errorf("%w: %v", provider.ErrInstanceUnhealthy, err)
 	}
-	return conn.Close()
+	return nil
 }
 
 func (g *InstanceGroup) Suspend(context.Context, []string) ([]string, error) {
