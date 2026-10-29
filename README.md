@@ -44,8 +44,35 @@ Set `FLEETING_PLUGIN_PATH` to the same directory when you install and when you r
 
 ## Use with forgehand
 
-[forgehand](https://gitlab.com/dunn.dev/forgehand) passes `plugin_config`
-through untouched and does not set `owner`, which defaults to `name_prefix`. Give each scale set or daemon its own `name_prefix` or `owner`, or they delete each other's VMs.
+```toml
+[[scalesets]]
+name = "example"
+url = "https://github.com/owner/repo"
+labels = ["self-hosted", "example"]
+
+[scalesets.github_app]
+client_id = "Iv1.0000000000000000"
+installation_id = 12345678
+private_key_path = "/run/credentials/forgehand.service/app.pem"
+
+[scalesets.runner]
+dir = "/opt/actions-runner"
+
+[scalesets.autoscaler]
+plugin = "registry.gitlab.com/dunn.dev/fleeting-plugin-libvirt:0.1"
+max_instances = 4
+
+[scalesets.autoscaler.plugin_config]
+pool_name = "images"
+base_volume_name = "golden.qcow2"
+name_prefix = "forgehand-"
+
+[scalesets.autoscaler.connector_config]
+protocol = "ssh"
+username = "runner"
+```
+
+`name_prefix` must differ from any gitlab-runner's on the same host, and forgehand does not set `owner`. The unit's user needs read and write access to the libvirt socket.
 
 ## Configuration
 
