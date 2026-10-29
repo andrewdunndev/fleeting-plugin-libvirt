@@ -671,6 +671,12 @@ func TestHeartbeatNeedsRunningDomainAndOpenPort(t *testing.T) {
 		t.Fatalf("dialed %q", dialed)
 	}
 
+	g.settings.ProtocolPort = 2222
+	if err := g.Heartbeat(context.Background(), name); err != nil || dialed != "10.1.2.3:2222" {
+		t.Fatalf("err=%v dialed %q", err, dialed)
+	}
+	g.settings.ProtocolPort = 0
+
 	dialContext = func(context.Context, string, string) (net.Conn, error) { return nil, errors.New("refused") }
 	if err := g.Heartbeat(context.Background(), name); !errors.Is(err, provider.ErrInstanceUnhealthy) {
 		t.Fatalf("closed port healthy: %v", err)
