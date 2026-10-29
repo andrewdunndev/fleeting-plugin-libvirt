@@ -1,3 +1,4 @@
+| `owner` | `name_prefix` | scopes ownership with the prefix; set it per daemon sharing a prefix, or each deletes the other's VMs |
 ![hero](hero.svg)
 
 # fleeting-plugin-libvirt
@@ -22,14 +23,16 @@ Pull a release from this project's container registry with
 or build `./cmd/fleeting-plugin-libvirt` and put the binary on `PATH`.
 
 ```
-fleeting-artifact install registry.gitlab.com/dunn.dev/fleeting-plugin-libvirt:1
+fleeting-artifact install registry.gitlab.com/dunn.dev/fleeting-plugin-libvirt:0.1
 ```
+
+Set `FLEETING_PLUGIN_PATH` to the same directory when you install and when you run, or set `plugin` to a binary path.
 
 ## Use with GitLab Runner
 
 ```toml
 [runners.autoscaler]
-  plugin = "registry.gitlab.com/dunn.dev/fleeting-plugin-libvirt:1"
+  plugin = "registry.gitlab.com/dunn.dev/fleeting-plugin-libvirt:0.1"
 
   [runners.autoscaler.plugin_config]
     pool_name = "images"
@@ -44,7 +47,7 @@ fleeting-artifact install registry.gitlab.com/dunn.dev/fleeting-plugin-libvirt:1
 ## Use with forgehand
 
 [forgehand](https://gitlab.com/dunn.dev/forgehand) passes `plugin_config`
-through untouched and sets `owner` to its session; the keys are the same.
+through untouched and does not set `owner`, which defaults to `name_prefix`. Give each scale set or daemon its own `name_prefix` or `owner`, or they delete each other's VMs.
 
 ## Configuration
 
@@ -93,7 +96,7 @@ started are returned without an error, and fleeting asks again later.
   warns when that account differs from `connector_config.username`. With it true nothing is seeded
   and `connector_config` passes through, so the base image must trust that key.
 - **Guest.** The base image needs the QEMU guest agent, which supplies the
-  address, and systemd 255 or later to import the credential.
+  address, and systemd 255 or later to import the credential. A non-root SSH account needs a tmpfiles line that imports its own credential, because systemd's stock `provision.conf` imports only `ssh.authorized_keys.root`; `ssh_credential_name` must name it.
 - **Address and health.** ConnectInfo waits up to two minutes for the agent's
   address on the interface carrying the domain's MAC (IPv4 first, then global
   IPv6; never loopback or link-local), so bridges and container networks in
