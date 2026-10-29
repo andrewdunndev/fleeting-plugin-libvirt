@@ -755,6 +755,15 @@ func TestUnknownKeyFailsInitNamingIt(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "vpcu_count") {
 		t.Fatalf("err=%v", err)
 	}
+	raw = `{"pool_name":"p","base_volume_name":"b","name_prefix":"job-","max_size":1,"ssh_credential_name":"k"}`
+	g = &InstanceGroup{connect: func(string) (Client, error) { return newFake(), nil }}
+	if err := json.Unmarshal([]byte(raw), g); err != nil {
+		t.Fatal(err)
+	}
+	_, err = g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{})
+	if err == nil || !strings.Contains(err.Error(), "ssh_credential_name") {
+		t.Fatalf("err=%v", err)
+	}
 	good := `{"pool_name":"p","base_volume_name":"b","name_prefix":"job-","max_size":1,"vcpu_count":2}`
 	g = &InstanceGroup{connect: func(string) (Client, error) { return newFake(), nil }}
 	if err := json.Unmarshal([]byte(good), g); err != nil {
@@ -1004,6 +1013,9 @@ func TestPartialDecreaseReturnsNilError(t *testing.T) {
 }
 
 func TestLockFileCanBeReadOnly(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root opens read-only files for writing")
+	}
 	path := filepath.Join(t.TempDir(), "lock")
 	if err := os.WriteFile(path, nil, 0o444); err != nil {
 		t.Fatal(err)
