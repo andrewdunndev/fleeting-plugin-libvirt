@@ -1,4 +1,3 @@
-| `owner` | `name_prefix` | scopes ownership with the prefix; set it per daemon sharing a prefix, or each deletes the other's VMs |
 ![hero](hero.svg)
 
 # fleeting-plugin-libvirt
@@ -60,7 +59,7 @@ An unknown key fails Init and names the key.
 | `base_volume_name` | required | volume that instances clone |
 | `name_prefix` | required | must end in `-`; every domain and volume is named `<prefix><owner tag>-<id>` |
 | `max_size` | required | upper bound on instances |
-| `owner` | `name_prefix` | scopes ownership with the prefix; set it per daemon sharing a prefix |
+| `owner` | `name_prefix` | scopes ownership with the prefix; set it per daemon sharing a prefix, or each deletes the other's VMs |
 | `vcpu_count` | 2 | vCPUs per instance |
 | `memory_mib` | 4096 | memory per instance |
 | `disk_size_gib` | base size | overlay size, never below the base volume |
