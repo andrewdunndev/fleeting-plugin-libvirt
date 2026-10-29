@@ -12,8 +12,8 @@ Each instance is a qcow2 overlay on `base_volume_name` plus a transient domain
 that libvirt removes when it stops. The plugin talks to libvirt over its socket
 in pure Go, so the binary is static and needs no libvirt headers. It deletes
 only what it created for its `owner`, and deletes nothing at Init or Shutdown,
-so a restart or a second process with its own `name_prefix` (or `owner`) on the same libvirt never destroys a running
-instance. No hardware is needed to build or test it.
+so a restart or a second process with its own `name_prefix` (or `owner`) on
+the same libvirt never destroys a running instance. No hardware is needed to build or test it.
 
 ## Install
 
@@ -124,7 +124,9 @@ started are returned without an error, and fleeting asks again later.
 - **Address and health.** ConnectInfo waits up to two minutes for the agent's
   address on the interface carrying the domain's MAC (IPv4 first, then global
   IPv6; never loopback or link-local), so bridges and container networks in
-  the guest are ignored. Heartbeat needs a running domain and an open SSH port.
+  the guest are ignored. It then waits within the same two minutes for the SSH
+  port (`protocol_port`) to accept connections. Heartbeat needs a running domain
+  and an open SSH port.
 - **Connection.** The libvirt connection is redialed on the next call after
   libvirtd drops it.
 - **Removal.** Decrease destroys the domain and deletes the volume, and treats
