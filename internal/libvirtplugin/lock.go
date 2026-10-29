@@ -21,7 +21,7 @@ var (
 func acquireLock(ctx context.Context, path string) (func(), error) {
 	ctx, cancel := context.WithTimeoutCause(ctx, lockTimeout, errLockTimedOut)
 	defer cancel()
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDONLY, 0o644)
 	if err != nil {
 		return nil, fmt.Errorf("opening lock_file: %w", err)
 	}

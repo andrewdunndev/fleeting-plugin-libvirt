@@ -996,3 +996,15 @@ func TestPartialDecreaseReturnsNilError(t *testing.T) {
 		t.Fatalf("done=%v err=%v", done, err)
 	}
 }
+
+func TestLockFileCanBeReadOnly(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "lock")
+	if err := os.WriteFile(path, nil, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	unlock, err := acquireLock(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlock()
+}
