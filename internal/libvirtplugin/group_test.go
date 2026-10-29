@@ -1026,3 +1026,37 @@ func TestLockFileCanBeReadOnly(t *testing.T) {
 	}
 	unlock()
 }
+
+func TestLockOpensExistingFileWithoutCreate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "lock")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var flags []int
+	orig := openFile
+	openFile = func(name string, flag int, perm os.FileMode) (*os.File, error) {
+		flags = append(flags, flag)
+		return orig(name, flag, perm)
+	}
+	t.Cleanup(func() { openFile = orig })
+	unlock, err := acquireLock(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlock()
+	if len(flags) != 1 || flags[0]&os.O_CREATE != 0 {
+		t.Fatalf("open flags %v, want one open without O_CREATE", flags)
+	}
+}
+
+func TestLockCreatesMissingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "lock")
+	unlock, err := acquireLock(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlock()
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal(err)
+	}
+}
