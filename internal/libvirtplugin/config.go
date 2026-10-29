@@ -12,12 +12,11 @@ import (
 )
 
 const (
-	defaultURI            = "qemu:///system"
-	defaultNetwork        = "default"
-	credentialPrefix      = "ssh.authorized_keys."
-	defaultCredentialName = credentialPrefix + "root"
-	defaultVCPU           = 2
-	defaultMemoryMiB      = 4096
+	defaultURI       = "qemu:///system"
+	defaultNetwork   = "default"
+	credentialPrefix = "ssh.authorized_keys."
+	defaultVCPU      = 2
+	defaultMemoryMiB = 4096
 )
 
 var prefixPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*-$`)
@@ -38,7 +37,6 @@ type Config struct {
 	LockFile          string `json:"lock_file"`
 	AdmitCommand      string `json:"admit_command"`
 	Owner             string `json:"owner"`
-	SSHCredentialName string `json:"ssh_credential_name"`
 	MaxSize           int    `json:"max_size"`
 }
 
@@ -65,9 +63,6 @@ func (c *Config) normalize() error {
 	}
 	if c.NetworkName == "" {
 		c.NetworkName = defaultNetwork
-	}
-	if c.SSHCredentialName == "" {
-		c.SSHCredentialName = defaultCredentialName
 	}
 	if c.VCPUCount == 0 {
 		c.VCPUCount = defaultVCPU
@@ -98,8 +93,6 @@ func (c *Config) normalize() error {
 		return errors.New("plugin_config.title must be a single line")
 	case c.ResourcePartition != "" && !strings.HasPrefix(c.ResourcePartition, "/"):
 		return fmt.Errorf("plugin_config.resource_partition %q must be an absolute cgroup path such as /machine/ci", c.ResourcePartition)
-	case strings.ContainsAny(c.SSHCredentialName, "= \t\r\n"):
-		return fmt.Errorf("plugin_config.ssh_credential_name %q must not contain '=' or whitespace", c.SSHCredentialName)
 	}
 	return nil
 }

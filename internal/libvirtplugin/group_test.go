@@ -292,15 +292,35 @@ func TestGeneratedKeySeedsPublicHalfAndConnectInfoReturnsPrivate(t *testing.T) {
 	}
 }
 
-func TestCustomCredentialName(t *testing.T) {
-	c := baseConfig()
-	c.SSHCredentialName = "ssh.authorized_keys.runner"
-	g, f := newGroup(t, c, false)
-	_, _ = g.Increase(context.Background(), 1)
-	for _, d := range f.domains {
-		if !strings.Contains(d.xml, "io.systemd.credential:ssh.authorized_keys.runner=ssh-ed25519 ") {
-			t.Fatalf("credential name ignored: %s", d.xml)
+func TestCredentialNameDerivesFromUsername(t *testing.T) {
+	for _, tc := range []struct{ username, want string }{
+		{"runner", "ssh.authorized_keys.runner"},
+		{"", "ssh.authorized_keys.root"},
+	} {
+		f := newFake()
+		g := &InstanceGroup{Config: baseConfig(), connect: func(string) (Client, error) { return f, nil }}
+		_, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{
+			ConnectorConfig: provider.ConnectorConfig{Username: tc.username},
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
+		_, _ = g.Increase(context.Background(), 1)
+		for _, d := range f.domains {
+			if !strings.Contains(d.xml, "io.systemd.credential:"+tc.want+"=ssh-ed25519 ") {
+				t.Fatalf("username %q: want credential %s in %s", tc.username, tc.want, d.xml)
+			}
+		}
+	}
+}
+
+func TestInitRejectsUsernameThatCannotNameACredential(t *testing.T) {
+	g := &InstanceGroup{Config: baseConfig(), connect: func(string) (Client, error) { return newFake(), nil }}
+	_, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{
+		ConnectorConfig: provider.ConnectorConfig{Username: "a=b"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "username") {
+		t.Fatalf("err=%v", err)
 	}
 }
 
@@ -632,7 +652,6 @@ func TestConfigValidation(t *testing.T) {
 		{"admit without lock", func(c *Config) { c.AdmitCommand = "true" }, "lock_file"},
 		{"multiline title", func(c *Config) { c.Title = "a\nb" }, "title"},
 		{"relative partition", func(c *Config) { c.ResourcePartition = "machine/ci" }, "resource_partition"},
-		{"credential with =", func(c *Config) { c.SSHCredentialName = "a=b" }, "ssh_credential_name"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -652,7 +671,7 @@ func TestConfigDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	if c.URI != "qemu:///system" || c.Owner != "job-" || c.NetworkName != "default" ||
-		c.SSHCredentialName != "ssh.authorized_keys.root" || c.VCPUCount != 2 || c.MemoryMiB != 4096 {
+		c.VCPUCount != 2 || c.MemoryMiB != 4096 {
 		t.Fatalf("%+v", c)
 	}
 }
@@ -811,34 +830,6 @@ func TestHungAdmitCommandIsKilledAndReleasesLock(t *testing.T) {
 	time.Sleep(1500 * time.Millisecond)
 	if _, err := os.Stat(marker); err == nil {
 		t.Fatal("admit_command child outlived its kill")
-	}
-}
-
-func TestInitWarnsWhenKeyAccountDiffersFromUsername(t *testing.T) {
-	for _, tc := range []struct {
-		username, cred string
-		static, warn   bool
-	}{
-		{"runner", "", false, true},
-		{"", "", false, true},
-		{"root", "", false, false},
-		{"runner", "ssh.authorized_keys.runner", false, false},
-		{"runner", "", true, false},
-	} {
-		var buf strings.Builder
-		c := baseConfig()
-		c.SSHCredentialName = tc.cred
-		g := &InstanceGroup{Config: c, connect: func(string) (Client, error) { return newFake(), nil }}
-		log := hclog.New(&hclog.LoggerOptions{Output: &buf, Level: hclog.Warn})
-		_, err := g.Init(context.Background(), log, provider.Settings{
-			ConnectorConfig: provider.ConnectorConfig{Username: tc.username, UseStaticCredentials: tc.static},
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := strings.Contains(buf.String(), "different account"); got != tc.warn {
-			t.Errorf("%+v: warned=%v log=%q", tc, got, buf.String())
-		}
 	}
 }
 

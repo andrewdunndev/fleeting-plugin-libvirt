@@ -1,6 +1,7 @@
 package libvirtplugin
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -40,6 +41,7 @@ type InstanceGroup struct {
 
 	privatePEM []byte
 	authorized string
+	credential string
 
 	mu       sync.Mutex
 	inflight map[string]struct{}
@@ -64,9 +66,9 @@ func (g *InstanceGroup) Init(ctx context.Context, log hclog.Logger, settings pro
 			return provider.ProviderInfo{}, err
 		}
 		g.privatePEM, g.authorized = priv, pub
-		if acct, ok := strings.CutPrefix(g.SSHCredentialName, credentialPrefix); ok && acct != settings.Username {
-			log.Warn("generated key is seeded for a different account than connector_config.username; set ssh_credential_name to match or SSH login will fail",
-				"credential", g.SSHCredentialName, "username", settings.Username)
+		g.credential = credentialPrefix + cmp.Or(settings.Username, "root")
+		if strings.ContainsAny(g.credential, "= \t\r\n") {
+			return provider.ProviderInfo{}, fmt.Errorf("connector_config.username %q must not contain '=' or whitespace", settings.Username)
 		}
 	}
 
@@ -234,7 +236,7 @@ func (g *InstanceGroup) createOne(ctx context.Context) error {
 		VCPU: g.VCPUCount, MemoryMiB: g.MemoryMiB,
 	}
 	if g.authorized != "" {
-		spec.CredentialKey, spec.AuthorizedKey = g.SSHCredentialName, g.authorized
+		spec.CredentialKey, spec.AuthorizedKey = g.credential, g.authorized
 	}
 	domXML, err := domainXML(spec)
 	if err == nil {

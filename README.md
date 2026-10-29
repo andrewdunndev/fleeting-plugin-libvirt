@@ -68,7 +68,6 @@ An unknown key fails Init and names the key.
 | `resource_partition` | none | cgroup partition such as `/machine/ci`; it must exist |
 | `lock_file` | none | held across admission, volume creation and start of each instance; waiting longer than five minutes for it refuses that Increase |
 | `admit_command` | none | run with `/bin/sh -c` under the lock; non-zero refuses that instance, and it is killed with its children after two minutes. Requires `lock_file` |
-| `ssh_credential_name` | `ssh.authorized_keys.root` | systemd credential that carries the public key |
 
 `admit_command` sees `FLEETING_LIBVIRT_NAME`, `FLEETING_LIBVIRT_MEMORY_MIB` and
 `FLEETING_LIBVIRT_VCPU_COUNT`. A refusal stops Increase; the instances already
@@ -91,11 +90,11 @@ started are returned without an error, and fleeting asks again later.
 - **Keys.** With `use_static_credentials` false, one ed25519 key is generated
   at Init; its public half is seeded into each guest as an SMBIOS credential and
   the private half is returned in ConnectInfo. The key is per plugin process
-  and is seeded for the account in `ssh_credential_name` (default `root`); Init
-  warns when that account differs from `connector_config.username`. With it true nothing is seeded
+  and is seeded as `ssh.authorized_keys.<connector_config.username>` (`root`
+  when empty). With it true nothing is seeded
   and `connector_config` passes through, so the base image must trust that key.
 - **Guest.** The base image needs the QEMU guest agent, which supplies the
-  address, and systemd 255 or later to import the credential. A non-root SSH account needs a tmpfiles line that imports its own credential, because systemd's stock `provision.conf` imports only `ssh.authorized_keys.root`; `ssh_credential_name` must name it.
+  address, and systemd 255 or later to import the credential. A non-root SSH account needs a tmpfiles line that imports its own credential, because systemd's stock `provision.conf` imports only `ssh.authorized_keys.root`; it must import `ssh.authorized_keys.<username>`.
 - **Address and health.** ConnectInfo waits up to two minutes for the agent's
   address on the interface carrying the domain's MAC (IPv4 first, then global
   IPv6; never loopback or link-local), so bridges and container networks in
