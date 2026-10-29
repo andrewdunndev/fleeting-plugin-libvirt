@@ -23,10 +23,10 @@
   <text x="578" y="178" font-size="11" fill="#404040">A qcow2 overlay on one base volume.</text>
   <text x="578" y="200" font-size="9" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="0.6">QCOW2 · BASE VOLUME</text>
   <rect x="850" y="84" width="270" height="130" rx="3" fill="#ffffff" stroke="#e0e0e0" stroke-width="1"/>
-  <text x="868" y="106" font-size="10" font-weight="700" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="1.4">OWNER</text>
+  <text x="868" y="106" font-size="10" font-weight="700" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="1.4">PREFIX</text>
   <text x="868" y="152" font-size="32" font-weight="700" fill="#4a6741" letter-spacing="-0.5">scoped</text>
   <text x="868" y="178" font-size="11" fill="#404040">Deletes only what it created, never at Init.</text>
-  <text x="868" y="200" font-size="9" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="0.6">OWNER TAG · NO SWEEP</text>
+  <text x="868" y="200" font-size="9" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="0.6">PREFIX TAG · NO SWEEP</text>
   <rect x="560" y="224" width="270" height="130" rx="3" fill="#ffffff" stroke="#e0e0e0" stroke-width="1"/>
   <text x="578" y="246" font-size="10" font-weight="700" font-family="IBM Plex Mono, Menlo, monospace" fill="#707070" letter-spacing="1.4">SOCKET</text>
   <text x="578" y="292" font-size="32" font-weight="700" fill="#4a6741" letter-spacing="-0.5">pure go</text>
