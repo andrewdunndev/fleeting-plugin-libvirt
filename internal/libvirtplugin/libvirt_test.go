@@ -1,8 +1,10 @@
 package libvirtplugin
 
 import (
+	"errors"
 	"net/url"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/digitalocean/go-libvirt"
@@ -48,5 +50,24 @@ func TestAddressesOfMACIgnoresOtherInterfaces(t *testing.T) {
 	}
 	if got := addressesOfMAC(ifaces, ""); len(got) != 0 {
 		t.Fatalf("empty MAC matched %v", got)
+	}
+}
+
+func TestURIPasswordNeverReachesErrors(t *testing.T) {
+	const pw = "hunter2secret"
+	u, err := url.Parse("qemu+tcp://admin:" + pw + "@host/system")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &libvirtClient{
+		uri:  u,
+		dial: func(*url.URL) (*libvirt.Libvirt, error) { return nil, errors.New("refused " + u.String()) },
+		live: func(*libvirt.Libvirt) bool { return false },
+	}
+	if err := c.ensure(); err == nil || strings.Contains(err.Error(), pw) {
+		t.Errorf("ensure error = %v, want one without the password", err)
+	}
+	if _, err := dialLibvirt("qemu+tcp://admin:" + pw + "@ho st:%zz/system"); err == nil || strings.Contains(err.Error(), pw) {
+		t.Errorf("dialLibvirt error = %v, want one without the password", err)
 	}
 }

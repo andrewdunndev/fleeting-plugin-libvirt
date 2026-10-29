@@ -23,7 +23,11 @@ type libvirtClient struct {
 func dialLibvirt(uri string) (Client, error) {
 	u, err := url.Parse(uri)
 	if err != nil {
-		return nil, fmt.Errorf("plugin_config.uri %q: %w", uri, err)
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			err = ue.Err
+		}
+		return nil, fmt.Errorf("plugin_config.uri is not a valid URL: %w", err)
 	}
 	c := &libvirtClient{uri: u, dial: libvirt.ConnectToURI, live: (*libvirt.Libvirt).IsConnected}
 	if err := c.ensure(); err != nil {
@@ -42,7 +46,7 @@ func (c *libvirtClient) ensure() error {
 	}
 	l, err := c.dial(c.uri)
 	if err != nil {
-		return fmt.Errorf("connecting to %s: %w; check the socket path and that the user may use it", c.uri, err)
+		return fmt.Errorf("connecting to %s: %s; check the socket path and that the user may use it", c.uri.Redacted(), scrub(err.Error(), c.uri))
 	}
 	c.l = l
 	return nil
@@ -288,4 +292,12 @@ func addressesOfMAC(ifaces []libvirt.DomainInterface, mac string) []string {
 		}
 	}
 	return addrs
+}
+
+// scrub removes the URI password from text that may echo it.
+func scrub(s string, u *url.URL) string {
+	if pw, ok := u.User.Password(); ok && pw != "" {
+		s = strings.ReplaceAll(s, pw, "xxxxx")
+	}
+	return s
 }
