@@ -12,7 +12,7 @@ Each instance is a qcow2 overlay on `base_volume_name` plus a transient domain
 that libvirt removes when it stops. The plugin talks to libvirt over its socket
 in pure Go, so the binary is static and needs no libvirt headers. It deletes
 only what it created for its `owner`, and deletes nothing at Init or Shutdown,
-so a restart or a second process on the same libvirt never destroys a running
+so a restart or a second process with its own `name_prefix` (or `owner`) on the same libvirt never destroys a running
 instance. No hardware is needed to build or test it.
 
 ## Install
