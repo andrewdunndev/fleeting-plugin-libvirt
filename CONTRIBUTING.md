@@ -11,9 +11,9 @@ and delete. Issues and merge requests go to
 hypervisor is needed: tests run against a fake of the small `Client` interface.
 
 ```
-just test    go test -race -p 4 ./...
-just lint    golangci-lint and go vet
-just build   bin/fleeting-plugin-libvirt
+just test
+just lint
+just build   writes bin/fleeting-plugin-libvirt
 ```
 
 Run `just lint` and `just test` before opening a merge request.
