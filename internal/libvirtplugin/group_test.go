@@ -1334,3 +1334,37 @@ func TestTPMKeyFailsInitAsUnknown(t *testing.T) {
 		t.Fatalf("err=%v", err)
 	}
 }
+
+func TestQcow2TemplateCarriesFormatAndCapacityIntoCloneAndDomain(t *testing.T) {
+	f := newFake()
+	f.template.Format, f.template.CapacityBytes = "qcow2", 540672
+	g := &InstanceGroup{Config: efiConfig(), connect: func(string) (Client, error) { return f, nil }}
+	if _, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{}); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := g.Increase(context.Background(), 1); err != nil || n != 1 {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	for name, d := range f.domains {
+		nv := name + ".nvram"
+		if !strings.Contains(d.xml, `<nvram format="qcow2">/pool/`+nv+`</nvram>`) {
+			t.Fatalf("domain xml: %s", d.xml)
+		}
+		vol := f.volumes[nv]
+		if !strings.Contains(vol, `<format type="qcow2">`) || !strings.Contains(vol, `>540672</capacity>`) {
+			t.Fatalf("clone XML: %s", vol)
+		}
+	}
+}
+
+func TestCreateFailsAndDeletesDiskWhenTemplateUnreadable(t *testing.T) {
+	g, f := newGroup(t, efiConfig(), false)
+	f.templateErr = errors.New("template gone")
+	n, err := g.Increase(context.Background(), 1)
+	if n != 0 || err == nil || !strings.Contains(err.Error(), "template gone") {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	if len(f.volumes) != 0 || len(f.clones) != 0 || len(f.domains) != 0 {
+		t.Fatalf("leaked volumes=%v clones=%v domains=%d", f.volumes, f.clones, len(f.domains))
+	}
+}

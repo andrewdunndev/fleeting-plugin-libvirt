@@ -39,8 +39,6 @@ type InstanceGroup struct {
 	client   Client
 	connect  func(uri string) (Client, error)
 
-	nvramFormat string
-
 	privatePEM []byte
 	authorized string
 	credential string
@@ -105,7 +103,6 @@ func (g *InstanceGroup) Init(ctx context.Context, log hclog.Logger, settings pro
 			_ = client.Close()
 			return provider.ProviderInfo{}, fmt.Errorf("nvram template %q has format %q; plugin_config.nvram_template must be a qcow2 or raw volume", g.NVRAMTemplate, tmpl.Format)
 		}
-		g.nvramFormat = tmpl.Format
 	}
 	g.client = client
 
@@ -262,7 +259,7 @@ func (g *InstanceGroup) createOne(ctx context.Context) error {
 	if g.NVRAMTemplate != "" {
 		tmpl, err := g.client.BaseVolume(ctx, g.PoolName, g.NVRAMTemplate)
 		if err == nil {
-			spec.NVRAMFormat = g.nvramFormat
+			spec.NVRAMFormat = tmpl.Format
 			spec.NVRAMPath, err = g.cloneNVRAM(ctx, name, tmpl)
 		}
 		if err != nil {
@@ -287,7 +284,7 @@ func (g *InstanceGroup) createOne(ctx context.Context) error {
 
 // cloneNVRAM copies the template into the domain's own NVRAM volume.
 func (g *InstanceGroup) cloneNVRAM(ctx context.Context, domain string, tmpl Base) (string, error) {
-	xml, err := nvramXML(nvramName(domain), g.nvramFormat, tmpl.CapacityBytes)
+	xml, err := nvramXML(nvramName(domain), tmpl.Format, tmpl.CapacityBytes)
 	if err != nil {
 		return "", err
 	}
