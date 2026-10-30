@@ -1496,3 +1496,47 @@ func TestTPMDomainCarriesNoVolumeAndVolumesOfUnchanged(t *testing.T) {
 		t.Fatalf("volumes = %v", f.volumes)
 	}
 }
+
+func TestURITransport(t *testing.T) {
+	const pw = "hunter2secret"
+	tests := []struct {
+		uri  string
+		want string
+	}{
+		{"", ""},
+		{"qemu:///system", ""},
+		{"qemu:///session", ""},
+		{"qemu+unix:///system", ""},
+		{"qemu+unix:///system?socket=/run/libvirt/libvirt-sock", ""},
+		{"qemu+tcp://host/system", "only the local unix socket"},
+		{"qemu://host/system", "only the local unix socket"},
+		{"qemu+tls://host/system", "only the local unix socket"},
+		{"qemu+ssh://host/system", "only the local unix socket"},
+		{"qemu+libssh://host/system", "only the local unix socket"},
+		{"qemu+tcp:///system", "only the local unix socket"},
+		{"qemu+tls:///system", "only the local unix socket"},
+		{"qemu+ssh:///system", "only the local unix socket"},
+		{"qemu+libssh:///system", "only the local unix socket"},
+		{"qemu+ext:///system?command=/bin/sh", "only the local unix socket"},
+		{"qemu+unix://host/system", "only the local unix socket"},
+		{"qemu+tcp://admin:" + pw + "@host/system", "qemu+tcp://admin:xxxxx@host/system"},
+		{"test:///default", "only the local unix socket"},
+		{"qemu+tcp://admin:" + pw + "@ho st:%zz/system", "not a valid URL"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.uri, func(t *testing.T) {
+			c := baseConfig()
+			c.URI = tc.uri
+			err := c.normalize()
+			if tc.want == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.want) || strings.Contains(err.Error(), pw) {
+				t.Fatalf("err=%v, want mention of %q and no password", err, tc.want)
+			}
+		})
+	}
+}

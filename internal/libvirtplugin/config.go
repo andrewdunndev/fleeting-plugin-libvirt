@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
 	"regexp"
 	"strings"
 )
@@ -84,6 +85,9 @@ func (c *Config) normalize() error {
 	if c.MemoryMiB == 0 {
 		c.MemoryMiB = defaultMemoryMiB
 	}
+	if err := checkLocalURI(c.URI); err != nil {
+		return err
+	}
 
 	switch {
 	case c.PoolName == "":
@@ -138,4 +142,18 @@ func nvramName(domain string) string { return domain + nvramSuffix }
 func domainOfVolume(vol string) string {
 	d, _ := strings.CutSuffix(vol, nvramSuffix)
 	return d
+}
+
+// checkLocalURI refuses every transport but the local unix socket: qemu or
+// qemu+unix with no host. go-libvirt reads a host as TLS and any other
+// "+transport" as a remote dial.
+func checkLocalURI(uri string) error {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return errors.New("plugin_config.uri is not a valid URL; use qemu:///system or qemu:///session")
+	}
+	if (u.Scheme != "qemu" && u.Scheme != "qemu+unix") || u.Host != "" {
+		return fmt.Errorf("plugin_config.uri %q is not supported: only the local unix socket is supported (qemu:///system, qemu:///session or qemu+unix:///system?socket=PATH)", u.Redacted())
+	}
+	return nil
 }

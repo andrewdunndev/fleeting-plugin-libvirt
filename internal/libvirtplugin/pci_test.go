@@ -112,7 +112,7 @@ func TestNormalizePCI(t *testing.T) {
 		t.Fatalf("session URI refused without pci_devices: %v", err)
 	}
 	c = pciConfig(devA)
-	c.URI = "qemu+ssh://host/system"
+	c.URI = "qemu+unix:///system"
 	if err := c.normalize(); err != nil {
 		t.Fatal(err)
 	}

@@ -9,7 +9,7 @@
 A [fleeting](https://gitlab.com/gitlab-org/fleeting/fleeting) plugin that runs each instance as a libvirt VM cloned from one base volume.
 
 Each instance is a qcow2 overlay on `base_volume_name` plus a transient domain
-that libvirt removes when it stops. The plugin talks to libvirt in pure Go, so the binary is static and needs no libvirt headers. The documented and tested transport is the local unix socket; a remote transport must verify its peer (TLS or SSH host keys) and is untested. It deletes
+that libvirt removes when it stops. The plugin talks to libvirt in pure Go, so the binary is static and needs no libvirt headers. The documented and tested transport is the local unix socket; only the local unix socket is supported. It deletes
 only what it created under its `name_prefix`, and deletes nothing at Init or Shutdown,
 so a restart or a second process with its own `name_prefix` on
 the same libvirt never destroys a running instance. No hardware is needed to build or test it.
