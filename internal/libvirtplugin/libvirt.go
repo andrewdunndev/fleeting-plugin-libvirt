@@ -361,3 +361,13 @@ func (c *libvirtClient) DomainCaps(ctx context.Context, machine string) (DomainC
 	}
 	return parseDomainCaps(s)
 }
+
+func (c *libvirtClient) NodeDeviceXML(ctx context.Context, name string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if err := c.ensure(); err != nil {
+		return "", err
+	}
+	return c.cur().NodeDeviceGetXMLDesc(name, 0)
+}

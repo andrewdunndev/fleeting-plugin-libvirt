@@ -45,9 +45,12 @@ type fakeClient struct {
 	// onCreateDomain runs when a domain start begins.
 	onCreateDomain func()
 	// caps answers DomainCaps; nil reads as a host with everything.
-	caps           *DomainCaps
-	capsErr        error
-	capsCalls      []string
+	caps      *DomainCaps
+	capsErr   error
+	capsCalls []string
+	// nodeDevices answers NodeDeviceXML by node-device name.
+	nodeDevices    map[string]string
+	nodeReads      []string
 	closed         bool
 	destroyed      []string
 	deletedVolumes []string
@@ -241,3 +244,14 @@ const fullCapsXML = `<domainCapabilities><devices>
 <hostdev supported='yes'><enum name='mode'><value>subsystem</value></enum><enum name='subsysType'><value>usb</value><value>pci</value></enum><enum name='pciBackend'><value>default</value><value>vfio</value></enum></hostdev>
 <tpm supported='yes'><enum name='model'><value>tpm-tis</value><value>tpm-crb</value></enum><enum name='backendModel'><value>passthrough</value><value>emulator</value></enum><enum name='backendVersion'><value>2.0</value></enum></tpm>
 </devices></domainCapabilities>`
+
+func (f *fakeClient) NodeDeviceXML(_ context.Context, name string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.nodeReads = append(f.nodeReads, name)
+	s, ok := f.nodeDevices[name]
+	if !ok {
+		return "", fmt.Errorf("node device %q: %w", name, ErrNotFound)
+	}
+	return s, nil
+}

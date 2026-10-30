@@ -31,23 +31,24 @@ var prefixPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*-$`)
 // Config is the plugin_config table. Every key is a json tag so that
 // fleeting's json.Unmarshal into the InstanceGroup reaches it.
 type Config struct {
-	URI               string `json:"uri"`
-	PoolName          string `json:"pool_name"`
-	BaseVolumeName    string `json:"base_volume_name"`
-	VCPUCount         int    `json:"vcpu_count"`
-	MemoryMiB         int    `json:"memory_mib"`
-	DiskSizeGiB       int    `json:"disk_size_gib"`
-	NamePrefix        string `json:"name_prefix"`
-	Title             string `json:"title"`
-	NetworkName       string `json:"network_name"`
-	ResourcePartition string `json:"resource_partition"`
-	LockFile          string `json:"lock_file"`
-	AdmitCommand      string `json:"admit_command"`
-	MaxSize           int    `json:"max_size"`
-	Firmware          string `json:"firmware"`
-	SecureBoot        bool   `json:"secure_boot"`
-	NVRAMTemplate     string `json:"nvram_template"`
-	TPM               bool   `json:"tpm"`
+	URI               string   `json:"uri"`
+	PoolName          string   `json:"pool_name"`
+	BaseVolumeName    string   `json:"base_volume_name"`
+	VCPUCount         int      `json:"vcpu_count"`
+	MemoryMiB         int      `json:"memory_mib"`
+	DiskSizeGiB       int      `json:"disk_size_gib"`
+	NamePrefix        string   `json:"name_prefix"`
+	Title             string   `json:"title"`
+	NetworkName       string   `json:"network_name"`
+	ResourcePartition string   `json:"resource_partition"`
+	LockFile          string   `json:"lock_file"`
+	AdmitCommand      string   `json:"admit_command"`
+	MaxSize           int      `json:"max_size"`
+	Firmware          string   `json:"firmware"`
+	SecureBoot        bool     `json:"secure_boot"`
+	NVRAMTemplate     string   `json:"nvram_template"`
+	TPM               bool     `json:"tpm"`
+	PCIDevices        []string `json:"pci_devices"`
 }
 
 // UnmarshalJSON decodes strictly but defers the error to Init, so a bad key
@@ -112,7 +113,7 @@ func (c *Config) normalize() error {
 	case c.ResourcePartition != "" && !strings.HasPrefix(c.ResourcePartition, "/"):
 		return fmt.Errorf("plugin_config.resource_partition %q must be an absolute cgroup path such as /machine/ci", c.ResourcePartition)
 	}
-	return nil
+	return c.normalizePCI()
 }
 
 // prefixTag is the prefix's share of an instance name, which is how volumes,

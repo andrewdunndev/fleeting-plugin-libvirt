@@ -105,7 +105,7 @@ func (g *InstanceGroup) Init(ctx context.Context, log hclog.Logger, settings pro
 			return provider.ProviderInfo{}, fmt.Errorf("nvram template %q has format %q; plugin_config.nvram_template must be a qcow2 volume, the format the loader is steered to (convert with qemu-img convert -f raw -O qcow2 <in> <out>)", g.NVRAMTemplate, tmpl.Format)
 		}
 	}
-	if g.TPM {
+	if g.TPM || len(g.PCIDevices) > 0 {
 		if err := g.checkHardware(ctx, client); err != nil {
 			_ = client.Close()
 			return provider.ProviderInfo{}, err
@@ -115,7 +115,7 @@ func (g *InstanceGroup) Init(ctx context.Context, log hclog.Logger, settings pro
 
 	return provider.ProviderInfo{
 		ID:      "libvirt/" + g.PoolName + "/" + g.NamePrefix,
-		MaxSize: cmp.Or(g.MaxSize, unboundedSize),
+		MaxSize: g.maxSize(),
 	}, nil
 }
 
@@ -549,12 +549,20 @@ func (g *InstanceGroup) checkHardware(ctx context.Context, client Client) error 
 	}
 	caps, err := client.DomainCaps(ctx, machine)
 	if err != nil {
-		return fmt.Errorf("reading domain capabilities for plugin_config.tpm: %w", err)
+		return fmt.Errorf("reading domain capabilities for the hardware keys: %w", err)
 	}
-	ok := caps.TPM && slices.Contains(caps.TPMModels, "tpm-tis") &&
-		slices.Contains(caps.TPMBackends, "emulator") && slices.Contains(caps.TPMVersions, "2.0")
-	if g.TPM && !ok {
-		return errors.New("plugin_config.tpm needs libvirt 8.6.0 or newer with swtpm installed on the host, offering model tpm-tis and an emulator backend at version 2.0; install swtpm and swtpm-tools, or unset tpm")
+	if g.TPM {
+		ok := caps.TPM && slices.Contains(caps.TPMModels, "tpm-tis") &&
+			slices.Contains(caps.TPMBackends, "emulator") && slices.Contains(caps.TPMVersions, "2.0")
+		if !ok {
+			return errors.New("plugin_config.tpm needs libvirt 8.6.0 or newer with swtpm installed on the host, offering model tpm-tis and an emulator backend at version 2.0; install swtpm and swtpm-tools, or unset tpm")
+		}
+	}
+	if len(g.PCIDevices) > 0 {
+		if !caps.PCIHostdev || !slices.Contains(caps.PCIBackends, "vfio") {
+			return errors.New("plugin_config.pci_devices needs PCI hostdev passthrough with the vfio backend; enable the IOMMU and load vfio-pci on the host, or unset pci_devices")
+		}
+		return g.checkPCI(ctx, client)
 	}
 	return nil
 }

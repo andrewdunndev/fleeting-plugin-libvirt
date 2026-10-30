@@ -63,4 +63,7 @@ type Client interface {
 	// DomainCaps returns the connection's domain capabilities for virt type kvm
 	// and the given machine type, empty for libvirt's default.
 	DomainCaps(ctx context.Context, machine string) (DomainCaps, error)
+	// NodeDeviceXML returns the description of a libvirt node device by name,
+	// such as pci_0000_03_00_0.
+	NodeDeviceXML(ctx context.Context, name string) (string, error)
 }

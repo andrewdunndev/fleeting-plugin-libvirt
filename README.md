@@ -105,6 +105,7 @@ An unknown key fails Init and names the key.
 | `secure_boot` | `false` | requires `firmware = "efi"`; selects secure-boot firmware with `enrolled-keys` off and turns SMM on |
 | `nvram_template` | none | required with `firmware = "efi"`, rejected otherwise; a qcow2 volume in `pool_name`; any other format fails Init. Each instance gets a clone named `<domain>.nvram`, made before the domain is defined and deleted with it |
 | `tpm` | `false` | adds a TPM 2.0 (model `tpm-tis`, swtpm emulator) to each instance; Init fails unless libvirt 8.6.0 or newer reports it, which needs swtpm and swtpm-tools on the host |
+| `pci_devices` | none | a pool of PCI addresses such as `0000:03:00.0`, lower-cased and unique; each instance takes one by passthrough (`managed='no'`). Init fails unless each is bound to `vfio-pci`, no two share an IOMMU group, every group peer outside the pool is `vfio-pci` bound (PCI bridges, class `0x06xxxx`, excepted), and libvirt offers PCI hostdev with the vfio backend. Refused with a `session` URI. `max_instances` may not exceed the pool size |
 | `vcpu_count` | 2 | vCPUs per instance |
 | `memory_mib` | 4096 | memory per instance |
 | `disk_size_gib` | base size | overlay size, never below the base volume |

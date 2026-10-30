@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"slices"
+	"strings"
 )
 
 type domainSpec struct {
@@ -398,4 +399,49 @@ func parseDomainCaps(s string) (DomainCaps, error) {
 		PCIHostdev:  c.Hostdev.Supported == "yes" && slices.Contains(vals(c.Hostdev, "subsysType"), "pci"),
 		PCIBackends: vals(c.Hostdev, "pciBackend"),
 	}, nil
+}
+
+// nodeDevice is the part of a PCI node-device description the pool checks use.
+type nodeDevice struct {
+	Driver string
+	Class  string
+	// Group is the IOMMU group number, -1 when the device has none.
+	Group int
+	// Peers are the group's members, this device included, as lower-case
+	// PCI addresses.
+	Peers []string
+}
+
+func parseNodeDevice(s string) (nodeDevice, error) {
+	var d struct {
+		Driver string `xml:"driver>name"`
+		Cap    struct {
+			Type  string `xml:"type,attr"`
+			Class string `xml:"class"`
+			Group *struct {
+				Number int `xml:"number,attr"`
+				Addrs  []struct {
+					Domain   string `xml:"domain,attr"`
+					Bus      string `xml:"bus,attr"`
+					Slot     string `xml:"slot,attr"`
+					Function string `xml:"function,attr"`
+				} `xml:"address"`
+			} `xml:"iommuGroup"`
+		} `xml:"capability"`
+	}
+	if err := xml.Unmarshal([]byte(s), &d); err != nil {
+		return nodeDevice{}, fmt.Errorf("parsing node device: %w", err)
+	}
+	if d.Cap.Type != "pci" {
+		return nodeDevice{}, fmt.Errorf("node device is not a PCI device (capability %q)", d.Cap.Type)
+	}
+	out := nodeDevice{Driver: d.Driver, Class: strings.ToLower(strings.TrimSpace(d.Cap.Class)), Group: -1}
+	if g := d.Cap.Group; g != nil {
+		out.Group = g.Number
+		for _, a := range g.Addrs {
+			hex := func(v string) string { return strings.TrimPrefix(strings.ToLower(v), "0x") }
+			out.Peers = append(out.Peers, fmt.Sprintf("%04s:%02s:%02s.%s", hex(a.Domain), hex(a.Bus), hex(a.Slot), hex(a.Function)))
+		}
+	}
+	return out, nil
 }
