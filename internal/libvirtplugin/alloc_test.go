@@ -257,6 +257,31 @@ func TestAllocatorExhaustionCleansVolumes(t *testing.T) {
 	if got := f2.volumeNames(); len(got) != 0 {
 		t.Fatalf("volumes made without a device: %v", got)
 	}
+	if len(f2.createdVolumes) != 0 || len(f2.deletedVolumes) != 0 {
+		t.Fatalf("volume churn before the claim: created %v deleted %v", f2.createdVolumes, f2.deletedVolumes)
+	}
+}
+
+func TestAllocatorClaimFailsClosedOnActiveReadError(t *testing.T) {
+	f := pciHost()
+	g := startPool(t, f, devA)
+	f.activeErr = errors.New("connection reset")
+	n, err := g.Increase(context.Background(), 1)
+	if n != 0 || err == nil || errors.Is(err, errNoDevice) {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	if !strings.Contains(err.Error(), "connection reset") {
+		t.Fatalf("read error lost: %v", err)
+	}
+	if len(f.createdVolumes) != 0 || len(f.domains) != 0 {
+		t.Fatalf("instance started without a device: volumes %v domains %d", f.createdVolumes, len(f.domains))
+	}
+	if _, err := g.claimDevice(context.Background(), map[string]bool{}); err == nil {
+		t.Fatal("claim succeeded on a failed read")
+	}
+	if len(g.reserved) != 0 {
+		t.Fatalf("reservation leaked: %v", g.reserved)
+	}
 }
 
 func TestAllocatorPartialIncrease(t *testing.T) {

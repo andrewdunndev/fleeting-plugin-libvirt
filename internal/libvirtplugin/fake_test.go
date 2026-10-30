@@ -62,6 +62,7 @@ type fakeClient struct {
 	closed          bool
 	destroyed       []string
 	deletedVolumes  []string
+	createdVolumes  []string
 	clones          []string
 }
 
@@ -114,6 +115,7 @@ func (f *fakeClient) CreateVolume(_ context.Context, pool, name, xml string) (st
 		return "", f.volErr
 	}
 	f.volumes[name] = xml
+	f.createdVolumes = append(f.createdVolumes, name)
 	return "/pool/" + name + ".qcow2", nil
 }
 
