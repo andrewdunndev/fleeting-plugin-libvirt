@@ -88,7 +88,7 @@ release-oci:
       aud: sigstore
   script:
     - |
-      for arch in amd64 arm64; do
+      for arch in amd64; do
         GOOS=linux GOARCH=$arch go build -trimpath -ldflags "-s -w" -o dist/linux/$arch/plugin ./cmd/fleeting-plugin-libvirt
       done
     - go install "$FLEETING_ARTIFACT"
