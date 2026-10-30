@@ -33,6 +33,8 @@ type fakeClient struct {
 	volErr        error
 	agentErr      error
 	addrs         []string
+	leaseAddrs    []string
+	leaseErr      error
 	// createDelay widens the window between admission and the domain
 	// appearing, so a lock that is released early is observable.
 	createDelay time.Duration
@@ -194,6 +196,18 @@ func (f *fakeClient) GuestAddresses(_ context.Context, name string) ([]string, e
 		return nil, f.agentErr
 	}
 	return f.addrs, nil
+}
+
+func (f *fakeClient) LeaseAddresses(_ context.Context, name string) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.domains[name]; !ok {
+		return nil, fmt.Errorf("domain %s: %w", name, ErrNotFound)
+	}
+	if f.leaseErr != nil {
+		return nil, f.leaseErr
+	}
+	return f.leaseAddrs, nil
 }
 
 // parseDomainForTest reads back the identity the plugin wrote, through the

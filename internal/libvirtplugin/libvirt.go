@@ -253,6 +253,14 @@ func (c *libvirtClient) DomainRunning(ctx context.Context, name string) (bool, e
 }
 
 func (c *libvirtClient) GuestAddresses(ctx context.Context, name string) ([]string, error) {
+	return c.addresses(ctx, name, libvirt.DomainInterfaceAddressesSrcAgent)
+}
+
+func (c *libvirtClient) LeaseAddresses(ctx context.Context, name string) ([]string, error) {
+	return c.addresses(ctx, name, libvirt.DomainInterfaceAddressesSrcLease)
+}
+
+func (c *libvirtClient) addresses(ctx context.Context, name string, src libvirt.DomainInterfaceAddressesSource) ([]string, error) {
 	d, err := c.lookup(ctx, name)
 	if err != nil {
 		return nil, err
@@ -268,7 +276,7 @@ func (c *libvirtClient) GuestAddresses(ctx context.Context, name string) ([]stri
 	if err != nil {
 		return nil, err
 	}
-	ifaces, err := c.cur().DomainInterfaceAddresses(d, uint32(libvirt.DomainInterfaceAddressesSrcAgent), 0)
+	ifaces, err := c.cur().DomainInterfaceAddresses(d, uint32(src), 0)
 	if hasCode(err, libvirt.ErrNoDomain) {
 		return nil, fmt.Errorf("domain %q: %w", name, ErrNotFound)
 	}

@@ -553,6 +553,45 @@ func TestConnectInfoWaitsForGuestAgent(t *testing.T) {
 	}
 }
 
+func TestConnectInfoUsesAgentAddressOverLease(t *testing.T) {
+	fastTimers(t)
+	g, f := newGroup(t, baseConfig(), false)
+	_, _ = g.Increase(context.Background(), 1)
+	var name string
+	for n := range f.domains {
+		name = n
+	}
+	f.leaseAddrs = []string{"10.5.5.5"}
+	info, err := g.ConnectInfo(context.Background(), name)
+	if err != nil || info.InternalAddr != "10.1.2.3" {
+		t.Fatalf("%+v %v", info, err)
+	}
+}
+
+func TestConnectInfoFallsBackToLease(t *testing.T) {
+	for _, agent := range []error{errors.New("agent not connected"), nil} {
+		fastTimers(t)
+		g, f := newGroup(t, baseConfig(), false)
+		_, _ = g.Increase(context.Background(), 1)
+		var name string
+		for n := range f.domains {
+			name = n
+		}
+		f.agentErr = agent
+		if agent == nil {
+			f.addrs = []string{"127.0.0.1", "fe80::1"}
+		}
+		f.leaseAddrs = []string{"10.5.5.5"}
+		info, err := g.ConnectInfo(context.Background(), name)
+		if err != nil || info.InternalAddr != "10.5.5.5" || info.ExternalAddr != "10.5.5.5" {
+			t.Fatalf("agent=%v: %+v %v", agent, info, err)
+		}
+		if err := g.Heartbeat(context.Background(), name); err != nil {
+			t.Fatalf("heartbeat: %v", err)
+		}
+	}
+}
+
 func TestConnectInfoIsBoundedAndNamesTheFix(t *testing.T) {
 	fastTimers(t)
 	g, f := newGroup(t, baseConfig(), false)
@@ -562,6 +601,7 @@ func TestConnectInfoIsBoundedAndNamesTheFix(t *testing.T) {
 		name = n
 	}
 	f.agentErr = errors.New("agent not connected")
+	f.leaseErr = errors.New("no lease")
 	start := time.Now()
 	_, err := g.ConnectInfo(context.Background(), name)
 	if err == nil || !strings.Contains(err.Error(), "qemu-guest-agent") || time.Since(start) > 5*time.Second {

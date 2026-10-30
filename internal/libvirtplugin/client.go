@@ -46,4 +46,8 @@ type Client interface {
 	// interface carrying the domain's own MAC. An agent that is not up yet is
 	// an error, not an empty list.
 	GuestAddresses(ctx context.Context, name string) ([]string, error)
+	// LeaseAddresses returns the addresses libvirt's DHCP leases hold for the
+	// domain's own MAC, for guests without an agent on a libvirt-managed
+	// network.
+	LeaseAddresses(ctx context.Context, name string) ([]string, error)
 }

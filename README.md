@@ -143,8 +143,9 @@ The secure-boot firmware descriptors require SMM, so `secure_boot` turns it on, 
   when empty). With it true nothing is seeded
   and `connector_config` passes through, so the base image must trust that key.
 - **Guest.** The base image boots with legacy BIOS on x86-64 with a virtio disk
-  and NIC, and needs the QEMU guest agent, which supplies the address, and
-  systemd to import the credential. Never overwrite the base volume while
+  and NIC, and needs systemd to import the credential. The QEMU guest agent is
+  needed only off a libvirt-managed network: the address comes from the agent
+  first and from libvirt's DHCP leases when the agent yields none. Never overwrite the base volume while
   instances run on overlays of it: upload a new volume name, change
   `base_volume_name`, and let old instances drain. systemd's stock
   `provision.conf` imports only `ssh.authorized_keys.root`, so a non-root SSH
@@ -168,7 +169,7 @@ The secure-boot firmware descriptors require SMM, so `secure_boot` turns it on, 
   ```
 
 - **Address and health.** ConnectInfo waits up to two minutes for the agent's
-  address on the interface carrying the domain's MAC (IPv4 first, then global
+  address (or, failing that, the DHCP lease) on the interface carrying the domain's MAC (IPv4 first, then global
   IPv6; never loopback or link-local), so bridges and container networks in
   the guest are ignored. It then waits within the same two minutes for the SSH
   port (`protocol_port`) to accept connections. Heartbeat needs a running domain

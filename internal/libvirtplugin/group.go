@@ -440,23 +440,46 @@ func (g *InstanceGroup) dialSSH(ctx context.Context, addr string) error {
 func (g *InstanceGroup) waitAddress(ctx context.Context, name string) (string, error) {
 	var last error
 	for {
-		addrs, err := g.client.GuestAddresses(ctx, name)
+		a, err := g.guestAddress(ctx, name)
 		if errors.Is(err, ErrNotFound) {
 			return "", err
 		}
 		if err == nil {
-			if a := pickAddress(addrs); a != "" {
-				return a, nil
-			}
-			err = errors.New("agent reported no usable address")
+			return a, nil
 		}
 		last = err
 		select {
 		case <-ctx.Done():
-			return "", fmt.Errorf("no address for %s from the guest agent: %w (last: %v); check that qemu-guest-agent runs in the base image and the guest has a lease", name, ctx.Err(), last)
+			return "", fmt.Errorf("no address for %s from the guest agent or a DHCP lease: %w (last: %v); check that qemu-guest-agent runs in the base image or the network is libvirt-managed, and the guest has a lease", name, ctx.Err(), last)
 		case <-time.After(pollInterval):
 		}
 	}
+}
+
+// guestAddress asks the guest agent first and falls back to libvirt's DHCP
+// leases when the agent yields no usable address. With neither it returns the
+// agent's error.
+func (g *InstanceGroup) guestAddress(ctx context.Context, name string) (string, error) {
+	addrs, err := g.client.GuestAddresses(ctx, name)
+	if errors.Is(err, ErrNotFound) {
+		return "", err
+	}
+	if err == nil {
+		if a := pickAddress(addrs); a != "" {
+			return a, nil
+		}
+		err = errors.New("agent reported no usable address")
+	}
+	leases, lerr := g.client.LeaseAddresses(ctx, name)
+	if errors.Is(lerr, ErrNotFound) {
+		return "", lerr
+	}
+	if lerr == nil {
+		if a := pickAddress(leases); a != "" {
+			return a, nil
+		}
+	}
+	return "", err
 }
 
 // pickAddress prefers an IPv4 address over a global IPv6 one and ignores
@@ -487,13 +510,9 @@ func (g *InstanceGroup) Heartbeat(ctx context.Context, instance string) error {
 	if !running {
 		return fmt.Errorf("%w: domain %s is not running", provider.ErrInstanceUnhealthy, instance)
 	}
-	addrs, err := g.client.GuestAddresses(ctx, instance)
+	addr, err := g.guestAddress(ctx, instance)
 	if err != nil {
 		return fmt.Errorf("%w: %v", provider.ErrInstanceUnhealthy, err)
-	}
-	addr := pickAddress(addrs)
-	if addr == "" {
-		return fmt.Errorf("%w: no address for %s", provider.ErrInstanceUnhealthy, instance)
 	}
 	if err := g.dialSSH(ctx, addr); err != nil {
 		return fmt.Errorf("%w: %v", provider.ErrInstanceUnhealthy, err)
