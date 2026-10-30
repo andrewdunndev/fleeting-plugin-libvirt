@@ -6,7 +6,9 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/go-hclog"
 	"gitlab.com/gitlab-org/fleeting/fleeting/provider"
@@ -299,5 +301,58 @@ func TestAllocatorConcurrentClaimsAreDistinct(t *testing.T) {
 	slices.Sort(got)
 	if !slices.Equal(got, []string{devA, devB}) {
 		t.Fatalf("claims %v", got)
+	}
+}
+
+// A used set read before the lock goes stale while another claim takes an
+// address, starts its domain and releases the reservation; a claim built on
+// that read would hand the same address out again.
+func TestAllocatorUsedSetReadUnderReservationLock(t *testing.T) {
+	f := pciHost()
+	g := startPool(t, f, devA, devB)
+	var fired atomic.Bool
+	var other string
+	done := make(chan struct{})
+	f.afterActiveRead = func() {
+		if fired.CompareAndSwap(false, true) {
+			go func() {
+				defer close(done)
+				other, _ = g.claimDevice(context.Background(), map[string]bool{})
+				f.outside("started", other)
+				g.releaseDevice(other)
+			}()
+			select {
+			case <-done:
+			case <-time.After(200 * time.Millisecond):
+			}
+		}
+	}
+	first, err := g.claimDevice(context.Background(), map[string]bool{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-done
+	if first == other {
+		t.Fatalf("both claims took %s", first)
+	}
+}
+
+func TestAllocatorBusyFallbackOnGroupMember(t *testing.T) {
+	f := pciHost()
+	f.nodeDevices["pci_0000_03_00_0"] = nodeXML("vfio-pci", "0x030000", 1, devA, peerP)
+	f.nodeDevices["pci_0000_03_00_1"] = nodeXML("vfio-pci", "0x030000", 1, devA, peerP)
+	g := startPool(t, f, devA, devB)
+	f.createHook = func(xml string) error {
+		if strings.Contains(xml, `bus="0x03"`) {
+			f.outside("late", peerP)
+			return errors.New("device or resource busy")
+		}
+		return nil
+	}
+	if n, err := g.Increase(context.Background(), 1); n != 1 || err != nil {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	if got := f.devicesOf(t); !slices.Equal(got, []string{devB}) {
+		t.Fatalf("devices %v", got)
 	}
 }

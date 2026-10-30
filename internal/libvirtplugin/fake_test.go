@@ -55,11 +55,14 @@ type fakeClient struct {
 	activeErr   error
 	// createHook runs inside a domain start with the domain XML and decides
 	// whether it fails.
-	createHook     func(xml string) error
-	closed         bool
-	destroyed      []string
-	deletedVolumes []string
-	clones         []string
+	createHook func(xml string) error
+	// afterActiveRead runs after an active-domain read has snapshotted and
+	// released the fake's lock, so the snapshot is already stale to its caller.
+	afterActiveRead func()
+	closed          bool
+	destroyed       []string
+	deletedVolumes  []string
+	clones          []string
 }
 
 func newFake() *fakeClient {
@@ -267,6 +270,9 @@ func (f *fakeClient) NodeDeviceXML(_ context.Context, name string) (string, erro
 }
 
 func (f *fakeClient) ActiveDomainsXML(context.Context) ([]string, error) {
+	if f.afterActiveRead != nil {
+		defer f.afterActiveRead()
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.activeReads++
