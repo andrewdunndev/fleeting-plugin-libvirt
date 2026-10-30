@@ -592,6 +592,21 @@ func TestConnectInfoFallsBackToLease(t *testing.T) {
 	}
 }
 
+func TestConnectInfoIgnoresUnusableLeaseAddresses(t *testing.T) {
+	fastTimers(t)
+	g, f := newGroup(t, baseConfig(), false)
+	_, _ = g.Increase(context.Background(), 1)
+	var name string
+	for n := range f.domains {
+		name = n
+	}
+	f.agentErr = errors.New("agent not connected")
+	f.leaseAddrs = []string{"127.0.0.1", "fe80::1"}
+	if info, err := g.ConnectInfo(context.Background(), name); err == nil {
+		t.Fatalf("used an unusable lease address %q", info.InternalAddr)
+	}
+}
+
 func TestConnectInfoIsBoundedAndNamesTheFix(t *testing.T) {
 	fastTimers(t)
 	g, f := newGroup(t, baseConfig(), false)

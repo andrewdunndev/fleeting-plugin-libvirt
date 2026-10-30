@@ -471,9 +471,6 @@ func (g *InstanceGroup) guestAddress(ctx context.Context, name string) (string, 
 		err = errors.New("agent reported no usable address")
 	}
 	leases, lerr := g.client.LeaseAddresses(ctx, name)
-	if errors.Is(lerr, ErrNotFound) {
-		return "", lerr
-	}
 	if lerr == nil {
 		if a := pickAddress(leases); a != "" {
 			return a, nil
