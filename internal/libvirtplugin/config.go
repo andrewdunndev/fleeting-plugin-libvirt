@@ -46,6 +46,7 @@ type Config struct {
 	MaxSize           int    `json:"max_size"`
 	Firmware          string `json:"firmware"`
 	SecureBoot        bool   `json:"secure_boot"`
+	NVRAMTemplate     string `json:"nvram_template"`
 }
 
 // UnmarshalJSON decodes strictly but defers the error to Init, so a bad key
@@ -99,6 +100,10 @@ func (c *Config) normalize() error {
 		return fmt.Errorf("plugin_config.firmware %q must be \"bios\" or \"efi\"", c.Firmware)
 	case c.SecureBoot && c.Firmware != firmwareEFI:
 		return errors.New("plugin_config.secure_boot requires firmware = \"efi\"")
+	case c.Firmware == firmwareEFI && c.NVRAMTemplate == "":
+		return errors.New("plugin_config.nvram_template is required with firmware = \"efi\": name the volume in pool_name that each instance's NVRAM is cloned from")
+	case c.NVRAMTemplate != "" && c.Firmware != firmwareEFI:
+		return errors.New("plugin_config.nvram_template requires firmware = \"efi\"")
 	case c.AdmitCommand != "" && c.LockFile == "":
 		return errors.New("plugin_config.admit_command requires lock_file: the lock spans the command and the VM start")
 	case strings.ContainsAny(c.Title, "\r\n"):
@@ -119,4 +124,16 @@ func prefixTag(prefix string) string {
 // ownsName reports whether a domain or volume name was minted for this prefix.
 func (c *Config) ownsName(name string) bool {
 	return strings.HasPrefix(name, c.NamePrefix+prefixTag(c.NamePrefix)+"-")
+}
+
+const nvramSuffix = ".nvram"
+
+// nvramName is the pool volume holding a domain's NVRAM.
+func nvramName(domain string) string { return domain + nvramSuffix }
+
+// domainOfVolume is the domain a pool volume belongs to: the volume's own name
+// for a disk, the name minus its suffix for NVRAM.
+func domainOfVolume(vol string) string {
+	d, _ := strings.CutSuffix(vol, nvramSuffix)
+	return d
 }

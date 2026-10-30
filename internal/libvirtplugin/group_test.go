@@ -724,6 +724,9 @@ func TestConfigValidation(t *testing.T) {
 		{"unknown firmware", func(c *Config) { c.Firmware = "uefi" }, "firmware"},
 		{"secure boot on bios", func(c *Config) { c.SecureBoot = true }, "secure_boot requires"},
 		{"secure boot on explicit bios", func(c *Config) { c.Firmware, c.SecureBoot = "bios", true }, "secure_boot requires"},
+		{"efi without template", func(c *Config) { c.Firmware = "efi" }, "nvram_template is required"},
+		{"template on bios", func(c *Config) { c.NVRAMTemplate = "tmpl" }, "nvram_template requires"},
+		{"secure boot without template", func(c *Config) { c.Firmware, c.SecureBoot = "efi", true }, "nvram_template is required"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1090,7 +1093,7 @@ func initEFI(t *testing.T, version uint64, verr error) (*fakeClient, error) {
 	f := newFake()
 	f.libVersion, f.libVersionErr = version, verr
 	c := baseConfig()
-	c.Firmware = "efi"
+	c.Firmware, c.NVRAMTemplate = "efi", "tmpl"
 	g := &InstanceGroup{Config: c, connect: func(string) (Client, error) { return f, nil }}
 	_, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{})
 	return f, err
@@ -1139,7 +1142,7 @@ func TestInitRejectsFirmwareRules(t *testing.T) {
 
 func TestCreateEmitsFirmwareXML(t *testing.T) {
 	c := baseConfig()
-	c.Firmware, c.SecureBoot = "efi", true
+	c.Firmware, c.SecureBoot, c.NVRAMTemplate = "efi", true, "tmpl"
 	g, f := newGroup(t, c, false)
 	if n, err := g.Increase(context.Background(), 1); err != nil || n != 1 {
 		t.Fatalf("n=%d err=%v", n, err)
@@ -1150,5 +1153,184 @@ func TestCreateEmitsFirmwareXML(t *testing.T) {
 				t.Errorf("%s missing: %s", part, d.xml)
 			}
 		}
+	}
+}
+
+func efiConfig() Config {
+	c := baseConfig()
+	c.Firmware, c.NVRAMTemplate = "efi", "tmpl"
+	return c
+}
+
+func TestInitNVRAMTemplateRules(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*fakeClient)
+		want   string
+	}{
+		{"template volume absent", func(f *fakeClient) { f.templateErr = ErrNotFound }, "nvram template"},
+		{"template format unsupported", func(f *fakeClient) { f.template.Format = "vmdk" }, "qcow2 or raw"},
+		{"template format unreported", func(f *fakeClient) { f.template.Format = "" }, "qcow2 or raw"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFake()
+			tc.mutate(f)
+			g := &InstanceGroup{Config: efiConfig(), connect: func(string) (Client, error) { return f, nil }}
+			_, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{})
+			if err == nil || !strings.Contains(err.Error(), tc.want) || !f.closed {
+				t.Fatalf("err=%v closed=%v", err, f.closed)
+			}
+		})
+	}
+}
+
+func TestInitRejectsEFIWithoutTemplateAndTemplateWithoutEFI(t *testing.T) {
+	for name, mutate := range map[string]func(*Config){
+		"efi alone":        func(c *Config) { c.NVRAMTemplate = "" },
+		"secure boot":      func(c *Config) { c.NVRAMTemplate, c.SecureBoot = "", true },
+		"template on bios": func(c *Config) { c.Firmware = "bios" },
+	} {
+		c := efiConfig()
+		mutate(&c)
+		g := &InstanceGroup{Config: c, connect: func(string) (Client, error) { return newFake(), nil }}
+		_, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{})
+		if err == nil || !strings.Contains(err.Error(), "nvram_template") {
+			t.Fatalf("%s: err=%v", name, err)
+		}
+	}
+}
+
+func TestBIOSNeverTouchesNVRAM(t *testing.T) {
+	g, f := newGroup(t, baseConfig(), false)
+	if n, err := g.Increase(context.Background(), 1); err != nil || n != 1 {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	if len(f.clones) != 0 || len(f.volumes) != 1 {
+		t.Fatalf("clones=%v volumes=%v", f.clones, f.volumes)
+	}
+	for _, d := range f.domains {
+		if strings.Contains(d.xml, "nvram") {
+			t.Fatalf("bios domain carries nvram: %s", d.xml)
+		}
+		_, _ = g.Decrease(context.Background(), []string{d.info.Name})
+	}
+	if len(f.deletedVolumes) != 1 {
+		t.Fatalf("deleted %v", f.deletedVolumes)
+	}
+}
+
+func TestIncreaseClonesTemplateIntoNVRAMBeforeDomain(t *testing.T) {
+	f := newFake()
+	f.template.Format = "raw"
+	g := &InstanceGroup{Config: efiConfig(), connect: func(string) (Client, error) { return f, nil }}
+	if _, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{}); err != nil {
+		t.Fatal(err)
+	}
+	f.onCreateDomain = func() {
+		if len(f.clones) != 1 {
+			t.Errorf("domain defined before the NVRAM clone: %v", f.clones)
+		}
+	}
+	if n, err := g.Increase(context.Background(), 1); err != nil || n != 1 {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	for name, d := range f.domains {
+		nv := name + ".nvram"
+		if _, ok := f.volumes[nv]; !ok || f.clones[0] != "tmpl>"+nv {
+			t.Fatalf("volumes=%v clones=%v", f.volumes, f.clones)
+		}
+		if !g.ownsName(nv) || !strings.Contains(d.xml, `<nvram format="raw">/pool/`+nv+`</nvram>`) {
+			t.Fatalf("ownership or xml: %s", d.xml)
+		}
+		if !strings.Contains(f.volumes[nv], `<format type="raw">`) {
+			t.Fatalf("clone XML: %s", f.volumes[nv])
+		}
+	}
+}
+
+func TestDecreaseDeletesNVRAMWithDisk(t *testing.T) {
+	g, f := newGroup(t, efiConfig(), false)
+	_, _ = g.Increase(context.Background(), 1)
+	var name string
+	for n := range f.domains {
+		name = n
+	}
+	done, err := g.Decrease(context.Background(), []string{name})
+	if err != nil || len(done) != 1 || len(f.volumes) != 0 {
+		t.Fatalf("done=%v err=%v volumes=%v", done, err, f.volumes)
+	}
+	f.volumes[name+".nvram"] = "<volume/>"
+	if done, err := g.Decrease(context.Background(), []string{name}); err != nil || len(done) != 1 || len(f.volumes) != 0 {
+		t.Fatalf("gone domain: done=%v err=%v volumes=%v", done, err, f.volumes)
+	}
+}
+
+func TestFailedCreateDeletesNVRAM(t *testing.T) {
+	g, f := newGroup(t, efiConfig(), false)
+	f.createErr = errors.New("no firmware")
+	if n, err := g.Increase(context.Background(), 1); n != 0 || err == nil {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	if len(f.volumes) != 0 || len(f.clones) != 1 {
+		t.Fatalf("leaked volumes=%v clones=%v", f.volumes, f.clones)
+	}
+}
+
+func TestFailedNVRAMCloneDeletesDiskAndStartsNothing(t *testing.T) {
+	g, f := newGroup(t, efiConfig(), false)
+	f.cloneErr = errors.New("pool full")
+	if n, err := g.Increase(context.Background(), 1); n != 0 || err == nil || !strings.Contains(err.Error(), "pool full") {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	if len(f.volumes) != 0 || len(f.domains) != 0 {
+		t.Fatalf("leaked volumes=%v domains=%d", f.volumes, len(f.domains))
+	}
+}
+
+func TestUpdateKeepsLiveNVRAMAndSweepsOrphanNVRAM(t *testing.T) {
+	g, f := newGroup(t, efiConfig(), false)
+	_, _ = g.Increase(context.Background(), 1)
+	var live string
+	for n := range f.domains {
+		live = n
+	}
+	gone := "job-" + prefixTag("job-") + "-deadbeef"
+	f.volumes[gone+".nvram"] = "<volume/>"
+	inflight := "job-" + prefixTag("job-") + "-cafe0000"
+	g.track(inflight)
+	f.volumes[inflight+".nvram"] = "<volume/>"
+	f.volumes["job-other.nvram"] = "<volume/>"
+	if got := states(t, g); len(got) != 1 {
+		t.Fatalf("Update = %v", got)
+	}
+	if _, ok := f.volumes[live+".nvram"]; !ok {
+		t.Fatal("live instance's NVRAM deleted")
+	}
+	if _, ok := f.volumes[gone+".nvram"]; ok {
+		t.Fatal("orphan NVRAM survived")
+	}
+	if _, ok := f.volumes[inflight+".nvram"]; !ok {
+		t.Fatal("in-flight create's NVRAM deleted")
+	}
+	if _, ok := f.volumes["job-other.nvram"]; !ok {
+		t.Fatal("foreign volume deleted")
+	}
+	g.untrack(inflight)
+	states(t, g)
+	if _, ok := f.volumes[inflight+".nvram"]; ok {
+		t.Fatal("settled orphan NVRAM survived")
+	}
+}
+
+func TestTPMKeyFailsInitAsUnknown(t *testing.T) {
+	raw := `{"pool_name":"p","base_volume_name":"b","name_prefix":"job-","max_size":1,"tpm":true}`
+	g := &InstanceGroup{connect: func(string) (Client, error) { return newFake(), nil }}
+	if err := json.Unmarshal([]byte(raw), g); err != nil {
+		t.Fatal(err)
+	}
+	_, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{})
+	if err == nil || !strings.Contains(err.Error(), `"tpm"`) {
+		t.Fatalf("err=%v", err)
 	}
 }

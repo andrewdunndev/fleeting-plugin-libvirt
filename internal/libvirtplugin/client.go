@@ -31,6 +31,9 @@ type Client interface {
 	BaseVolume(ctx context.Context, pool, name string) (Base, error)
 	// CreateVolume defines a volume from XML and returns its path.
 	CreateVolume(ctx context.Context, pool, name, xml string) (path string, err error)
+	// CloneVolume defines a volume from XML as a copy of the volume src and
+	// returns its path.
+	CloneVolume(ctx context.Context, pool, src, name, xml string) (path string, err error)
 	DeleteVolume(ctx context.Context, pool, name string) error
 	ListVolumes(ctx context.Context, pool string) ([]string, error)
 	// CreateDomain defines and starts a transient domain.

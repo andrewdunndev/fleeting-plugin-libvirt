@@ -39,6 +39,8 @@ type InstanceGroup struct {
 	client   Client
 	connect  func(uri string) (Client, error)
 
+	nvramFormat string
+
 	privatePEM []byte
 	authorized string
 	credential string
@@ -93,6 +95,18 @@ func (g *InstanceGroup) Init(ctx context.Context, log hclog.Logger, settings pro
 			return provider.ProviderInfo{}, fmt.Errorf("plugin_config.firmware \"efi\" needs libvirt 9.2.0 or newer, the host has %d.%d.%d", v/1000000, v/1000%1000, v%1000)
 		}
 	}
+	if g.NVRAMTemplate != "" {
+		tmpl, err := client.BaseVolume(ctx, g.PoolName, g.NVRAMTemplate)
+		if err != nil {
+			_ = client.Close()
+			return provider.ProviderInfo{}, fmt.Errorf("nvram template %q in pool %q: %w; check plugin_config.nvram_template, and refresh the pool if the volume was just added", g.NVRAMTemplate, g.PoolName, err)
+		}
+		if tmpl.Format != "qcow2" && tmpl.Format != "raw" {
+			_ = client.Close()
+			return provider.ProviderInfo{}, fmt.Errorf("nvram template %q has format %q; plugin_config.nvram_template must be a qcow2 or raw volume", g.NVRAMTemplate, tmpl.Format)
+		}
+		g.nvramFormat = tmpl.Format
+	}
 	g.client = client
 
 	return provider.ProviderInfo{
@@ -143,7 +157,7 @@ func (g *InstanceGroup) Update(ctx context.Context, fn func(instance string, sta
 	// already visible to the listing that follows.
 	var settled []string
 	for _, v := range vols {
-		if g.ownsName(v) && !g.isInflight(v) {
+		if g.ownsName(v) && !g.isInflight(domainOfVolume(v)) {
 			settled = append(settled, v)
 		}
 	}
@@ -160,7 +174,7 @@ func (g *InstanceGroup) Update(ctx context.Context, fn func(instance string, sta
 		fn(d.Name, provider.StateRunning)
 	}
 	for _, v := range settled {
-		if seen[v] {
+		if seen[domainOfVolume(v)] {
 			continue
 		}
 		if err := g.client.DeleteVolume(ctx, g.PoolName, v); err != nil && !errors.Is(err, ErrNotFound) {
@@ -245,6 +259,17 @@ func (g *InstanceGroup) createOne(ctx context.Context) error {
 		VCPU: g.VCPUCount, MemoryMiB: g.MemoryMiB,
 		Firmware: g.Firmware, SecureBoot: g.SecureBoot,
 	}
+	if g.NVRAMTemplate != "" {
+		tmpl, err := g.client.BaseVolume(ctx, g.PoolName, g.NVRAMTemplate)
+		if err == nil {
+			spec.NVRAMFormat = g.nvramFormat
+			spec.NVRAMPath, err = g.cloneNVRAM(ctx, name, tmpl)
+		}
+		if err != nil {
+			g.removeVolumes(ctx, name)
+			return fmt.Errorf("nvram for %s: %w", name, err)
+		}
+	}
 	if g.authorized != "" {
 		spec.CredentialKey, spec.AuthorizedKey = g.credential, g.authorized
 	}
@@ -253,14 +278,39 @@ func (g *InstanceGroup) createOne(ctx context.Context) error {
 		err = g.client.CreateDomain(ctx, domXML)
 	}
 	if err != nil {
-		cleanup := context.WithoutCancel(ctx)
-		if derr := g.client.DeleteVolume(cleanup, g.PoolName, name); derr != nil && !errors.Is(derr, ErrNotFound) {
-			g.log.Warn("removing volume after failed create", "volume", name, "error", derr)
-		}
+		g.removeVolumes(ctx, name)
 		return fmt.Errorf("starting domain %s: %w", name, err)
 	}
 	g.log.Info("instance created", "name", name)
 	return nil
+}
+
+// cloneNVRAM copies the template into the domain's own NVRAM volume.
+func (g *InstanceGroup) cloneNVRAM(ctx context.Context, domain string, tmpl Base) (string, error) {
+	xml, err := nvramXML(nvramName(domain), g.nvramFormat, tmpl.CapacityBytes)
+	if err != nil {
+		return "", err
+	}
+	return g.client.CloneVolume(ctx, g.PoolName, g.NVRAMTemplate, nvramName(domain), xml)
+}
+
+// removeVolumes deletes what a failed create made, even when the create was
+// cancelled.
+func (g *InstanceGroup) removeVolumes(ctx context.Context, name string) {
+	cleanup := context.WithoutCancel(ctx)
+	for _, v := range g.volumesOf(name) {
+		if derr := g.client.DeleteVolume(cleanup, g.PoolName, v); derr != nil && !errors.Is(derr, ErrNotFound) {
+			g.log.Warn("removing volume after failed create", "volume", v, "error", derr)
+		}
+	}
+}
+
+// volumesOf lists the pool volumes an instance may hold.
+func (g *InstanceGroup) volumesOf(name string) []string {
+	if g.NVRAMTemplate == "" {
+		return []string{name}
+	}
+	return []string{nvramName(name), name}
 }
 
 // admit runs admit_command; a non-zero exit refuses this instance. It runs
@@ -324,8 +374,15 @@ func (g *InstanceGroup) Decrease(ctx context.Context, instances []string) ([]str
 			}
 		}
 		if g.ownsName(name) {
-			if err := g.client.DeleteVolume(ctx, g.PoolName, name); err != nil && !errors.Is(err, ErrNotFound) {
-				errs = append(errs, fmt.Errorf("deleting volume %s: %w", name, err))
+			var verr error
+			for _, v := range g.volumesOf(name) {
+				if err := g.client.DeleteVolume(ctx, g.PoolName, v); err != nil && !errors.Is(err, ErrNotFound) {
+					verr = fmt.Errorf("deleting volume %s: %w", v, err)
+					break
+				}
+			}
+			if verr != nil {
+				errs = append(errs, verr)
 				continue
 			}
 		}

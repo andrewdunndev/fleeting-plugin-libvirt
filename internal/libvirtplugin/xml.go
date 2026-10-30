@@ -17,6 +17,8 @@ type domainSpec struct {
 	CredentialKey string // credential name; empty seeds nothing
 	Firmware      string // "efi" selects libvirt firmware autoselection
 	SecureBoot    bool
+	NVRAMPath     string
+	NVRAMFormat   string
 	AuthorizedKey string
 }
 
@@ -66,6 +68,7 @@ type osDoc struct {
 	Type     osTypeDoc   `xml:"type"`
 	Features *fwFeatures `xml:"firmware,omitempty"`
 	Loader   *loaderDoc  `xml:"loader,omitempty"`
+	NVRAM    *nvramDoc   `xml:"nvram,omitempty"`
 	SMBIOS   *smbiosDoc  `xml:"smbios,omitempty"`
 }
 
@@ -85,6 +88,11 @@ type fwFeature struct {
 
 type loaderDoc struct {
 	Format string `xml:"format,attr"`
+}
+
+type nvramDoc struct {
+	Format string `xml:"format,attr"`
+	Path   string `xml:",chardata"`
 }
 
 type smbiosDoc struct {
@@ -214,6 +222,7 @@ func domainXML(s domainSpec) (string, error) {
 		d.OS.Type.Machine = "q35"
 		d.OS.Loader = &loaderDoc{Format: "qcow2"}
 		d.OS.Features = &fwFeatures{Feature: []fwFeature{{Enabled: "no", Name: "secure-boot"}}}
+		d.OS.NVRAM = &nvramDoc{Format: s.NVRAMFormat, Path: s.NVRAMPath}
 		if s.SecureBoot {
 			d.OS.Features = &fwFeatures{Feature: []fwFeature{
 				{Enabled: "yes", Name: "secure-boot"},
@@ -251,6 +260,11 @@ func domainXML(s domainSpec) (string, error) {
 	return string(b), nil
 }
 
+type backingDoc struct {
+	Path   string   `xml:"path"`
+	Format typeAttr `xml:"format"`
+}
+
 type volumeDoc struct {
 	XMLName  xml.Name `xml:"volume"`
 	Name     string   `xml:"name"`
@@ -261,10 +275,7 @@ type volumeDoc struct {
 	Target struct {
 		Format typeAttr `xml:"format"`
 	} `xml:"target"`
-	Backing struct {
-		Path   string   `xml:"path"`
-		Format typeAttr `xml:"format"`
-	} `xml:"backingStore"`
+	Backing *backingDoc `xml:"backingStore,omitempty"`
 }
 
 // volumeXML describes a qcow2 overlay on base. The base format defaults to
@@ -273,7 +284,7 @@ func volumeXML(name string, base Base, capacity uint64) (string, error) {
 	v := volumeDoc{Name: name}
 	v.Capacity.Unit, v.Capacity.Value = "bytes", capacity
 	v.Target.Format.Type = "qcow2"
-	v.Backing.Path = base.Path
+	v.Backing = &backingDoc{Path: base.Path}
 	v.Backing.Format.Type = base.Format
 	if v.Backing.Format.Type == "" {
 		v.Backing.Format.Type = "qcow2"
@@ -323,4 +334,16 @@ func parseVolumeFormat(s string) (string, error) {
 		return "", fmt.Errorf("parsing volume XML: %w", err)
 	}
 	return v.Target.Format.Type, nil
+}
+
+// nvramXML describes a copy of the NVRAM template in its own format.
+func nvramXML(name, format string, capacity uint64) (string, error) {
+	v := volumeDoc{Name: name}
+	v.Capacity.Unit, v.Capacity.Value = "bytes", capacity
+	v.Target.Format.Type = format
+	b, err := xml.Marshal(v)
+	if err != nil {
+		return "", fmt.Errorf("building NVRAM volume XML: %w", err)
+	}
+	return string(b), nil
 }

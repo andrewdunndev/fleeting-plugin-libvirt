@@ -1,4 +1,4 @@
-![hero](hero.svg)
+| `nvram_template` | none | required with `firmware = "efi"`, rejected otherwise; a qcow2 or raw volume in `pool_name`. Each instance gets a clone named `<domain>.nvram`, in the template's format, made before the domain is defined and deleted with it |![hero](hero.svg)
 
 # fleeting-plugin-libvirt
 
@@ -31,6 +31,7 @@ Set `FLEETING_PLUGIN_PATH` to the same directory when you install and when you r
 
 - A KVM host, and read and write access to the libvirt socket for the account running the plugin.
 - For `firmware = "efi"`, libvirt 9.2.0 or newer on the host, checked at Init, and OVMF qcow2 firmware descriptors installed.
+- For `firmware = "efi"`, an NVRAM template volume in the pool: a qcow2 or raw copy of the firmware variable store, with the keys the guest should trust enrolled (a custom PK and db made with virt-fw-vars for `secure_boot`).
 - A base image as described under Guest in How it behaves.
 
 ### Verify a release
@@ -115,6 +116,10 @@ An unknown key fails Init and names the key.
 `FLEETING_LIBVIRT_VCPU_COUNT`. A refusal stops Increase; the instances already
 started are returned without an error, and fleeting asks again later.
 
+### No tpm key
+
+There is no `tpm` key. Cairn's sealed-boot evidence only covers boots with swtpm attached, and the lab round boots a sealed image without one; a TPM2 keyslot is bound to one TPM's state, which a fresh per-instance emulator cannot reproduce. Use an image whose disk unlock needs no TPM. A `tpm` key fails Init as unknown.
+
 ### Secure boot hazard
 
 The secure-boot firmware descriptors require SMM, so `secure_boot` turns it on, and plain `efi` leaves it off. Under nested KVM, SMM can hang the guest kernel at ExitBootServices; the instance then never reaches sshd. Use `secure_boot` only on hosts that are not themselves guests.
@@ -128,7 +133,8 @@ The secure-boot firmware descriptors require SMM, so `secure_boot` turns it on, 
   Heartbeat (forgehand with a heartbeat function, or the runner with
   `FF_USE_FLEETING_ACQUIRE_HEARTBEATS`), which fails and leads to Decrease.
   Update also deletes our volumes that have no domain and no create in
-  flight, and never reports them.
+  flight, and never reports them. An NVRAM volume belongs to the domain
+  named by its name minus `.nvram`, so a live instance's NVRAM is never swept.
 - **Keys.** With `use_static_credentials` false, one ed25519 key is generated
   at Init; its public half is seeded into each guest as an SMBIOS credential and
   the private half is returned in ConnectInfo. The key is per plugin process

@@ -311,3 +311,27 @@ func (c *libvirtClient) LibVersion(ctx context.Context) (uint64, error) {
 	}
 	return c.cur().ConnectGetLibVersion()
 }
+
+func (c *libvirtClient) CloneVolume(ctx context.Context, pool, src, _, xml string) (string, error) {
+	p, err := c.pool(ctx, pool)
+	if err != nil {
+		return "", err
+	}
+	from, err := c.cur().StorageVolLookupByName(p, src)
+	if hasCode(err, libvirt.ErrNoStorageVol) {
+		return "", fmt.Errorf("volume %q in pool %q: %w", src, pool, ErrNotFound)
+	}
+	if err != nil {
+		return "", err
+	}
+	v, err := c.cur().StorageVolCreateXMLFrom(p, xml, from, 0)
+	if err != nil {
+		return "", err
+	}
+	path, err := c.cur().StorageVolGetPath(v)
+	if err != nil {
+		_ = c.cur().StorageVolDelete(v, libvirt.StorageVolDeleteNormal)
+		return "", err
+	}
+	return path, nil
+}

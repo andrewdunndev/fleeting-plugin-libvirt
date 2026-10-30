@@ -20,6 +20,10 @@ type fakeClient struct {
 	mu      sync.Mutex
 	base    Base
 	baseErr error
+	// template answers BaseVolume for the name "tmpl".
+	template    Base
+	templateErr error
+	cloneErr    error
 	// libVersion of 0 reads as a current libvirt.
 	libVersion    uint64
 	libVersionErr error
@@ -41,14 +45,16 @@ type fakeClient struct {
 	closed         bool
 	destroyed      []string
 	deletedVolumes []string
+	clones         []string
 }
 
 func newFake() *fakeClient {
 	return &fakeClient{
-		base:    Base{Path: "/pool/base.qcow2", Format: "qcow2", CapacityBytes: 10 << 30},
-		volumes: map[string]string{},
-		domains: map[string]*fakeDomain{},
-		addrs:   []string{"10.1.2.3"},
+		base:     Base{Path: "/pool/base.qcow2", Format: "qcow2", CapacityBytes: 10 << 30},
+		template: Base{Path: "/pool/tmpl.fd", Format: "qcow2", CapacityBytes: 540672},
+		volumes:  map[string]string{},
+		domains:  map[string]*fakeDomain{},
+		addrs:    []string{"10.1.2.3"},
 	}
 }
 
@@ -64,7 +70,10 @@ func (f *fakeClient) LibVersion(context.Context) (uint64, error) {
 	return f.libVersion, nil
 }
 
-func (f *fakeClient) BaseVolume(_ context.Context, _, _ string) (Base, error) {
+func (f *fakeClient) BaseVolume(_ context.Context, _, name string) (Base, error) {
+	if name == "tmpl" {
+		return f.template, f.templateErr
+	}
 	return f.base, f.baseErr
 }
 
@@ -76,6 +85,17 @@ func (f *fakeClient) CreateVolume(_ context.Context, pool, name, xml string) (st
 	}
 	f.volumes[name] = xml
 	return "/pool/" + name + ".qcow2", nil
+}
+
+func (f *fakeClient) CloneVolume(_ context.Context, _, src, name, xml string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.cloneErr != nil {
+		return "", f.cloneErr
+	}
+	f.volumes[name] = xml
+	f.clones = append(f.clones, src+">"+name)
+	return "/pool/" + name, nil
 }
 
 func (f *fakeClient) DeleteVolume(ctx context.Context, _, name string) error {

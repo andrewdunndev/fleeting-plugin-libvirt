@@ -94,8 +94,8 @@ func TestParseDomainMAC(t *testing.T) {
 
 const (
 	goldenOSBIOS = `<os><type>hvm</type><smbios mode="sysinfo"></smbios></os>`
-	goldenOSEFI  = `<os firmware="efi"><type machine="q35">hvm</type><firmware><feature enabled="no" name="secure-boot"></feature></firmware><loader format="qcow2"></loader><smbios mode="sysinfo"></smbios></os>`
-	goldenOSSB   = `<os firmware="efi"><type machine="q35">hvm</type><firmware><feature enabled="yes" name="secure-boot"></feature><feature enabled="no" name="enrolled-keys"></feature></firmware><loader format="qcow2"></loader><smbios mode="sysinfo"></smbios></os>`
+	goldenOSEFI  = `<os firmware="efi"><type machine="q35">hvm</type><firmware><feature enabled="no" name="secure-boot"></feature></firmware><loader format="qcow2"></loader><nvram format="qcow2">/p/d.nvram</nvram><smbios mode="sysinfo"></smbios></os>`
+	goldenOSSB   = `<os firmware="efi"><type machine="q35">hvm</type><firmware><feature enabled="yes" name="secure-boot"></feature><feature enabled="no" name="enrolled-keys"></feature></firmware><loader format="qcow2"></loader><nvram format="qcow2">/p/d.nvram</nvram><smbios mode="sysinfo"></smbios></os>`
 	goldenFeat   = `<features><acpi></acpi><apic></apic></features>`
 	goldenFeatSB = `<features><acpi></acpi><apic></apic><smm state="on"></smm></features>`
 )
@@ -118,6 +118,9 @@ func TestDomainXMLFirmwareModes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := fullSpec()
 			s.Firmware, s.SecureBoot = tc.firmware, tc.secure
+			if tc.firmware == "efi" {
+				s.NVRAMPath, s.NVRAMFormat = "/p/d.nvram", "qcow2"
+			}
 			got, err := domainXML(s)
 			if err != nil {
 				t.Fatal(err)
@@ -131,5 +134,29 @@ func TestDomainXMLFirmwareModes(t *testing.T) {
 				t.Fatalf("domain XML:\n got %s\nwant %s", got, want)
 			}
 		})
+	}
+}
+
+func TestDomainXMLNVRAMFormatFollowsTemplate(t *testing.T) {
+	s := fullSpec()
+	s.Firmware, s.NVRAMPath, s.NVRAMFormat = "efi", "/p/d.nvram", "raw"
+	got, _ := domainXML(s)
+	if !strings.Contains(got, `<nvram format="raw">/p/d.nvram</nvram>`) {
+		t.Fatalf("nvram element: %s", got)
+	}
+	s.Firmware = "bios"
+	if got, _ := domainXML(s); strings.Contains(got, "nvram") {
+		t.Fatalf("bios domain carries nvram: %s", got)
+	}
+}
+
+func TestNVRAMVolumeXMLGolden(t *testing.T) {
+	got, err := nvramXML("job-a-1.nvram", "raw", 540672)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `<volume><name>job-a-1.nvram</name><capacity unit="bytes">540672</capacity><target><format type="raw"></format></target></volume>`
+	if got != want {
+		t.Fatalf("got %s\nwant %s", got, want)
 	}
 }
