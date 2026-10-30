@@ -49,8 +49,13 @@ type fakeClient struct {
 	capsErr   error
 	capsCalls []string
 	// nodeDevices answers NodeDeviceXML by node-device name.
-	nodeDevices    map[string]string
-	nodeReads      []string
+	nodeDevices map[string]string
+	nodeReads   []string
+	activeReads int
+	activeErr   error
+	// createHook runs inside a domain start with the domain XML and decides
+	// whether it fails.
+	createHook     func(xml string) error
 	closed         bool
 	destroyed      []string
 	deletedVolumes []string
@@ -157,6 +162,11 @@ func (f *fakeClient) CreateDomain(_ context.Context, xml string) error {
 	if f.createDelay > 0 {
 		time.Sleep(f.createDelay)
 	}
+	if f.createHook != nil {
+		if err := f.createHook(xml); err != nil {
+			return err
+		}
+	}
 	f.mu.Lock()
 	if f.createErr != nil {
 		f.mu.Unlock()
@@ -254,4 +264,18 @@ func (f *fakeClient) NodeDeviceXML(_ context.Context, name string) (string, erro
 		return "", fmt.Errorf("node device %q: %w", name, ErrNotFound)
 	}
 	return s, nil
+}
+
+func (f *fakeClient) ActiveDomainsXML(context.Context) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.activeReads++
+	var out []string
+	for _, d := range f.domains {
+		if d.running {
+			out = append(out, d.xml)
+		}
+	}
+	sort.Strings(out)
+	return out, f.activeErr
 }

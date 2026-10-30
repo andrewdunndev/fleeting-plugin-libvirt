@@ -32,6 +32,9 @@ Set `FLEETING_PLUGIN_PATH` to the same directory when you install and when you r
 - A KVM host, and read and write access to the libvirt socket for the account running the plugin.
 - For `firmware = "efi"`, libvirt 9.2.0 or newer on the host, checked at Init, and OVMF qcow2 firmware descriptors installed.
 - For `firmware = "efi"`, an NVRAM template volume in the pool: a qcow2 copy of the firmware variable store, with the keys the guest should trust enrolled (a custom PK and db made with virt-fw-vars for `secure_boot`). Convert a raw store before uploading it to the pool: `qemu-img convert -f raw -O qcow2 <in> <out>`.
+- For `tpm`, swtpm and swtpm-tools on the host.
+- For nested KVM in guests, the host's `nested` parameter on `kvm_intel` or `kvm_amd`. There is no key: the CPU is `host-passthrough`, so the guest sees `vmx` or `svm` exactly when the host does.
+- For `pci_devices`, the IOMMU enabled, each address and every device in its IOMMU group (PCI bridges excepted) bound to `vfio-pci` at boot, and the system daemon, `qemu:///system`, with the plugin's account in the libvirt socket group. libvirt does the privileged work, so the plugin needs no root.
 - A base image as described under Guest in How it behaves.
 
 ### Verify a release
@@ -100,12 +103,12 @@ An unknown key fails Init and names the key.
 | `pool_name` | required | storage pool of the base volume and the overlays |
 | `base_volume_name` | required | volume that instances clone |
 | `name_prefix` | required | must end in `-`; every domain and volume is named `<prefix><tag>-<id>` |
-| `max_size` | unbounded | upper bound on instances; the scaler's own cap applies either way |
+| `max_size` | unbounded | upper bound on instances; the scaler's own cap applies either way. With `pci_devices` the reported size is the pool size, lowered by `max_size` when that is smaller |
 | `firmware` | `bios` | `bios` for the legacy BIOS domain, or `efi` for libvirt firmware autoselection on machine `q35` with a qcow2 loader and secure boot off |
 | `secure_boot` | `false` | requires `firmware = "efi"`; selects secure-boot firmware with `enrolled-keys` off and turns SMM on |
 | `nvram_template` | none | required with `firmware = "efi"`, rejected otherwise; a qcow2 volume in `pool_name`; any other format fails Init. Each instance gets a clone named `<domain>.nvram`, made before the domain is defined and deleted with it |
 | `tpm` | `false` | adds a TPM 2.0 (model `tpm-tis`, swtpm emulator) to each instance; Init fails unless libvirt 8.6.0 or newer reports it, which needs swtpm and swtpm-tools on the host |
-| `pci_devices` | none | a pool of PCI addresses such as `0000:03:00.0`, lower-cased and unique; each instance takes one by passthrough (`managed='no'`). Init fails unless each is bound to `vfio-pci`, no two share an IOMMU group, every group peer outside the pool is `vfio-pci` bound (PCI bridges, class `0x06xxxx`, excepted), and libvirt offers PCI hostdev with the vfio backend. Refused with a `session` URI. `max_instances` may not exceed the pool size |
+| `pci_devices` | none | a pool of PCI addresses such as `0000:03:00.0`, lower-cased and unique; each instance takes one by passthrough (`managed='no'`). Init fails unless each is bound to `vfio-pci`, no two share an IOMMU group, every group peer outside the pool is `vfio-pci` bound (PCI bridges, class `0x06xxxx`, excepted), and libvirt offers PCI hostdev with the vfio backend. Refused with a `session` URI. `max_instances` may not exceed the pool size; fleeting refuses it at start. Each instance holds one address until it is destroyed; see Hardware |
 | `vcpu_count` | 2 | vCPUs per instance |
 | `memory_mib` | 4096 | memory per instance |
 | `disk_size_gib` | base size | overlay size, never below the base volume |
@@ -122,6 +125,12 @@ started are returned without an error, and fleeting asks again later.
 ### TPM
 
 The vTPM does not replace the host TPM a disk was enrolled to: a TPM2 keyslot is bound to one TPM's state, which a fresh per-instance emulator cannot reproduce, so a `tpm2-luks` sealed image will not unlock in a second instance. Runner images use a direct block setup. libvirt deletes the TPM state when it stops the domain, but leaves a per-VM swtpm log on the host, and the state of a VM lost without libvirt's stop path persists; clean both by age on the host.
+
+### Hardware
+
+`pci_devices` is a pool; the plugin keeps no state beyond an in-process reservation. An address is free when neither it nor any member of its IOMMU group is named in a hostdev of any active domain on the connection, ours or not, read fresh from libvirt's domain XML. After a restart the domain list is the whole truth: a running device is never handed out twice and a free one is not lost. A create that fails counts as a taken device only when a fresh read now names the address or a group member; the next free address is then tried, and when none is left the volumes are removed and Increase stops, returning any instances already started. Any other create failure returns libvirt's error unchanged. Decrease needs nothing: the device returns to the pool when its domain ends and stays bound to `vfio-pci`. Use one address per IOMMU group, a single function at a time; a virtual function is an ordinary address.
+
+A passed-through device can carry state from one job to the next. What survives a release is whatever the device's reset support provides, and a device with no reliable reset can keep firmware or memory state, while the guest has DMA to it behind the IOMMU. Serve `pci_devices` scale sets trusted repositories only. A vTPM carries nothing across jobs.
 
 ### Secure boot hazard
 

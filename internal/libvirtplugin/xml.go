@@ -22,6 +22,7 @@ type domainSpec struct {
 	NVRAMPath     string
 	NVRAMFormat   string
 	TPM           bool
+	PCIAddress    string // lower-case PCI address of the hostdev; empty adds none
 	AuthorizedKey string
 }
 
@@ -141,6 +142,7 @@ type devicesDoc struct {
 	Console   consoleDoc   `xml:"console"`
 	RNG       rngDoc       `xml:"rng"`
 	TPM       *tpmDoc      `xml:"tpm,omitempty"`
+	Hostdev   *hostdevDoc  `xml:"hostdev,omitempty"`
 }
 
 type diskDoc struct {
@@ -208,6 +210,22 @@ type tpmDoc struct {
 	} `xml:"backend"`
 }
 
+type hostdevDoc struct {
+	Mode    string `xml:"mode,attr"`
+	Type    string `xml:"type,attr"`
+	Managed string `xml:"managed,attr"`
+	Source  struct {
+		Address pciAddressDoc `xml:"address"`
+	} `xml:"source"`
+}
+
+type pciAddressDoc struct {
+	Domain   string `xml:"domain,attr"`
+	Bus      string `xml:"bus,attr"`
+	Slot     string `xml:"slot,attr"`
+	Function string `xml:"function,attr"`
+}
+
 const guestAgentChannel = "org.qemu.guest_agent.0"
 
 func domainXML(s domainSpec) (string, error) {
@@ -268,6 +286,15 @@ func domainXML(s domainSpec) (string, error) {
 	if s.TPM {
 		d.Devices.TPM = &tpmDoc{Model: "tpm-tis"}
 		d.Devices.TPM.Backend.Type, d.Devices.TPM.Backend.Version = "emulator", "2.0"
+	}
+
+	if s.PCIAddress != "" {
+		h := &hostdevDoc{Mode: "subsystem", Type: "pci", Managed: "no"}
+		h.Source.Address = pciAddressDoc{
+			Domain: "0x" + s.PCIAddress[0:4], Bus: "0x" + s.PCIAddress[5:7],
+			Slot: "0x" + s.PCIAddress[8:10], Function: "0x" + s.PCIAddress[11:],
+		}
+		d.Devices.Hostdev = h
 	}
 
 	b, err := xml.Marshal(d)
@@ -439,9 +466,42 @@ func parseNodeDevice(s string) (nodeDevice, error) {
 	if g := d.Cap.Group; g != nil {
 		out.Group = g.Number
 		for _, a := range g.Addrs {
-			hex := func(v string) string { return strings.TrimPrefix(strings.ToLower(v), "0x") }
-			out.Peers = append(out.Peers, fmt.Sprintf("%04s:%02s:%02s.%s", hex(a.Domain), hex(a.Bus), hex(a.Slot), hex(a.Function)))
+			out.Peers = append(out.Peers, pciAddress(a.Domain, a.Bus, a.Slot, a.Function))
 		}
+	}
+	return out, nil
+}
+
+// pciAddress joins libvirt's 0x-prefixed address attributes into the
+// lower-case 0000:03:00.0 form.
+func pciAddress(domain, bus, slot, function string) string {
+	hex := func(v string) string { return strings.TrimPrefix(strings.ToLower(v), "0x") }
+	return fmt.Sprintf("%04s:%02s:%02s.%s", hex(domain), hex(bus), hex(slot), hex(function))
+}
+
+// parseHostdevAddresses returns the host PCI addresses a domain passes
+// through. The guest-side address child and hostdevs of other kinds are not
+// host addresses and are ignored.
+func parseHostdevAddresses(s string) ([]string, error) {
+	var d struct {
+		Hostdevs []struct {
+			Mode   string `xml:"mode,attr"`
+			Type   string `xml:"type,attr"`
+			Source struct {
+				Address pciAddressDoc `xml:"address"`
+			} `xml:"source"`
+		} `xml:"devices>hostdev"`
+	}
+	if err := xml.Unmarshal([]byte(s), &d); err != nil {
+		return nil, fmt.Errorf("parsing domain XML: %w", err)
+	}
+	var out []string
+	for _, h := range d.Hostdevs {
+		a := h.Source.Address
+		if h.Mode != "subsystem" || h.Type != "pci" || a.Bus == "" {
+			continue
+		}
+		out = append(out, pciAddress(a.Domain, a.Bus, a.Slot, a.Function))
 	}
 	return out, nil
 }

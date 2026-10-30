@@ -53,6 +53,7 @@ func (g *InstanceGroup) checkPCI(ctx context.Context, client Client) error {
 	}
 	groups := map[int]string{}
 	peers := map[string]nodeDevice{}
+	g.groupPeers = map[string][]string{}
 	for _, a := range g.PCIDevices {
 		d, err := readNodeDevice(ctx, client, a)
 		if err != nil {
@@ -68,6 +69,7 @@ func (g *InstanceGroup) checkPCI(ctx context.Context, client Client) error {
 			return fmt.Errorf("plugin_config.pci_devices %s and %s share IOMMU group %d; list one of them", other, a, d.Group)
 		}
 		groups[d.Group] = a
+		g.groupPeers[a] = d.Peers
 		for _, p := range d.Peers {
 			if p == a {
 				continue

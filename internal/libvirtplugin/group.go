@@ -46,6 +46,10 @@ type InstanceGroup struct {
 
 	mu       sync.Mutex
 	inflight map[string]struct{}
+	// reserved holds the pool addresses a create in this process has claimed.
+	reserved map[string]struct{}
+	// groupPeers maps each pool address to the members of its IOMMU group.
+	groupPeers map[string][]string
 }
 
 var _ provider.InstanceGroup = (*InstanceGroup)(nil)
@@ -60,6 +64,7 @@ func (g *InstanceGroup) Init(ctx context.Context, log hclog.Logger, settings pro
 	g.log = log
 	g.settings = settings
 	g.inflight = map[string]struct{}{}
+	g.reserved = map[string]struct{}{}
 
 	if !settings.UseStaticCredentials {
 		priv, pub, err := generateKey()
@@ -138,7 +143,10 @@ func (g *InstanceGroup) isInflight(name string) bool {
 	return ok
 }
 
-var errAdmissionRefused = errors.New("admission refused")
+var (
+	errAdmissionRefused = errors.New("admission refused")
+	errNoDevice         = errors.New("no free device in plugin_config.pci_devices")
+)
 
 func (g *InstanceGroup) newName() (string, error) {
 	var b [4]byte
@@ -192,15 +200,16 @@ func (g *InstanceGroup) Update(ctx context.Context, fn func(instance string, sta
 
 func (g *InstanceGroup) Increase(ctx context.Context, n int) (int, error) {
 	var errs []error
+	tried := map[string]bool{}
 	created := 0
 	for i := 0; i < n; i++ {
 		if err := ctx.Err(); err != nil {
 			errs = append(errs, err)
 			break
 		}
-		if err := g.createOne(ctx); err != nil {
+		if err := g.createOne(ctx, tried); err != nil {
 			errs = append(errs, err)
-			if errors.Is(err, errAdmissionRefused) || errors.Is(err, errLockTimedOut) {
+			if errors.Is(err, errAdmissionRefused) || errors.Is(err, errLockTimedOut) || errors.Is(err, errNoDevice) {
 				break
 			}
 			continue
@@ -222,7 +231,9 @@ func (g *InstanceGroup) partial(done int, op string, errs []error) error {
 	return err
 }
 
-func (g *InstanceGroup) createOne(ctx context.Context) error {
+// createOne makes one instance. tried holds the pool addresses that proved busy
+// during this Increase call, so a released reservation is not picked again.
+func (g *InstanceGroup) createOne(ctx context.Context, tried map[string]bool) error {
 	name, err := g.newName()
 	if err != nil {
 		return err
@@ -241,6 +252,14 @@ func (g *InstanceGroup) createOne(ctx context.Context) error {
 		if err := g.admit(ctx, name); err != nil {
 			return err
 		}
+	}
+
+	var dev string
+	if len(g.PCIDevices) > 0 {
+		if dev, err = g.claimDevice(ctx, tried); err != nil {
+			return err
+		}
+		defer func() { g.releaseDevice(dev) }()
 	}
 
 	base, err := g.client.BaseVolume(ctx, g.PoolName, g.BaseVolumeName)
@@ -277,16 +296,100 @@ func (g *InstanceGroup) createOne(ctx context.Context) error {
 	if g.authorized != "" {
 		spec.CredentialKey, spec.AuthorizedKey = g.credential, g.authorized
 	}
-	domXML, err := domainXML(spec)
-	if err == nil {
-		err = g.client.CreateDomain(ctx, domXML)
-	}
-	if err != nil {
-		g.removeVolumes(ctx, name)
-		return fmt.Errorf("starting domain %s: %w", name, err)
+	for {
+		spec.PCIAddress = dev
+		domXML, err := domainXML(spec)
+		if err == nil {
+			err = g.client.CreateDomain(ctx, domXML)
+		}
+		if err == nil {
+			break
+		}
+		if dev == "" || !g.deviceTaken(ctx, dev) {
+			g.removeVolumes(ctx, name)
+			return fmt.Errorf("starting domain %s: %w", name, err)
+		}
+		tried[dev] = true
+		g.releaseDevice(dev)
+		dev = ""
+		if dev, err = g.claimDevice(ctx, tried); err != nil {
+			g.removeVolumes(ctx, name)
+			return err
+		}
 	}
 	g.log.Info("instance created", "name", name)
 	return nil
+}
+
+// usedDevices reads every active domain on the connection, ours or not, and
+// returns the host PCI addresses their hostdevs name.
+func (g *InstanceGroup) usedDevices(ctx context.Context) (map[string]bool, error) {
+	docs, err := g.client.ActiveDomainsXML(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing active domains: %w", err)
+	}
+	used := map[string]bool{}
+	for _, doc := range docs {
+		addrs, err := parseHostdevAddresses(doc)
+		if err != nil {
+			return nil, err
+		}
+		for _, a := range addrs {
+			used[a] = true
+		}
+	}
+	return used, nil
+}
+
+// deviceHeld reports whether the address or a member of its IOMMU group is
+// named in used.
+func (g *InstanceGroup) deviceHeld(addr string, used map[string]bool) bool {
+	if used[addr] {
+		return true
+	}
+	for _, p := range g.groupPeers[addr] {
+		if used[p] {
+			return true
+		}
+	}
+	return false
+}
+
+// claimDevice reads the used set and reserves the first free pool address in
+// one critical section.
+func (g *InstanceGroup) claimDevice(ctx context.Context, tried map[string]bool) (string, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	used, err := g.usedDevices(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, a := range g.PCIDevices {
+		if _, held := g.reserved[a]; held || tried[a] || g.deviceHeld(a, used) {
+			continue
+		}
+		g.reserved[a] = struct{}{}
+		return a, nil
+	}
+	return "", errNoDevice
+}
+
+func (g *InstanceGroup) releaseDevice(addr string) {
+	g.mu.Lock()
+	delete(g.reserved, addr)
+	g.mu.Unlock()
+}
+
+// deviceTaken reports whether a fresh read of the active domains now names the
+// address or a member of its group, which is what makes a failed create a
+// busy device and not some other fault.
+func (g *InstanceGroup) deviceTaken(ctx context.Context, addr string) bool {
+	used, err := g.usedDevices(ctx)
+	if err != nil {
+		g.log.Warn("rereading devices after failed create", "device", addr, "err", err)
+		return false
+	}
+	return g.deviceHeld(addr, used)
 }
 
 // cloneNVRAM copies the template into the domain's own NVRAM volume.

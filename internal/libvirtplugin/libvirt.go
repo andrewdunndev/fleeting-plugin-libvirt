@@ -371,3 +371,28 @@ func (c *libvirtClient) NodeDeviceXML(ctx context.Context, name string) (string,
 	}
 	return c.cur().NodeDeviceGetXMLDesc(name, 0)
 }
+
+func (c *libvirtClient) ActiveDomainsXML(ctx context.Context) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := c.ensure(); err != nil {
+		return nil, err
+	}
+	doms, _, err := c.cur().ConnectListAllDomains(1, libvirt.ConnectListDomainsActive)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, d := range doms {
+		desc, err := c.cur().DomainGetXMLDesc(d, 0)
+		if hasCode(err, libvirt.ErrNoDomain) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, desc)
+	}
+	return out, nil
+}

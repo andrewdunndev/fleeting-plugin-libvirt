@@ -60,6 +60,9 @@ type Client interface {
 	// domain's own MAC, for guests without an agent on a libvirt-managed
 	// network.
 	LeaseAddresses(ctx context.Context, name string) ([]string, error)
+	// ActiveDomainsXML returns the XML of every active domain on the
+	// connection, whoever owns it.
+	ActiveDomainsXML(ctx context.Context) ([]string, error)
 	// DomainCaps returns the connection's domain capabilities for virt type kvm
 	// and the given machine type, empty for libvirt's default.
 	DomainCaps(ctx context.Context, machine string) (DomainCaps, error)
