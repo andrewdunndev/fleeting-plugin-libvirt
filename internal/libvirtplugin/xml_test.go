@@ -94,7 +94,7 @@ func TestParseDomainMAC(t *testing.T) {
 
 const (
 	goldenOSBIOS = `<os><type>hvm</type><smbios mode="sysinfo"></smbios></os>`
-	goldenOSEFI  = `<os firmware="efi"><type machine="q35">hvm</type><loader format="qcow2"></loader><smbios mode="sysinfo"></smbios></os>`
+	goldenOSEFI  = `<os firmware="efi"><type machine="q35">hvm</type><firmware><feature enabled="no" name="secure-boot"></feature></firmware><loader format="qcow2"></loader><smbios mode="sysinfo"></smbios></os>`
 	goldenOSSB   = `<os firmware="efi"><type machine="q35">hvm</type><firmware><feature enabled="yes" name="secure-boot"></feature><feature enabled="no" name="enrolled-keys"></feature></firmware><loader format="qcow2"></loader><smbios mode="sysinfo"></smbios></os>`
 	goldenFeat   = `<features><acpi></acpi><apic></apic></features>`
 	goldenFeatSB = `<features><acpi></acpi><apic></apic><smm state="on"></smm></features>`

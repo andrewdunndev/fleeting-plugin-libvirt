@@ -213,6 +213,7 @@ func domainXML(s domainSpec) (string, error) {
 		d.OS.Firmware = firmwareEFI
 		d.OS.Type.Machine = "q35"
 		d.OS.Loader = &loaderDoc{Format: "qcow2"}
+		d.OS.Features = &fwFeatures{Feature: []fwFeature{{Enabled: "no", Name: "secure-boot"}}}
 		if s.SecureBoot {
 			d.OS.Features = &fwFeatures{Feature: []fwFeature{
 				{Enabled: "yes", Name: "secure-boot"},
