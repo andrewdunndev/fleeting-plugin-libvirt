@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -32,24 +34,26 @@ var prefixPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*-$`)
 // Config is the plugin_config table. Every key is a json tag so that
 // fleeting's json.Unmarshal into the InstanceGroup reaches it.
 type Config struct {
-	URI               string   `json:"uri"`
-	PoolName          string   `json:"pool_name"`
-	BaseVolumeName    string   `json:"base_volume_name"`
-	VCPUCount         int      `json:"vcpu_count"`
-	MemoryMiB         int      `json:"memory_mib"`
-	DiskSizeGiB       int      `json:"disk_size_gib"`
-	NamePrefix        string   `json:"name_prefix"`
-	Title             string   `json:"title"`
-	NetworkName       string   `json:"network_name"`
-	ResourcePartition string   `json:"resource_partition"`
-	LockFile          string   `json:"lock_file"`
-	AdmitCommand      string   `json:"admit_command"`
-	MaxSize           int      `json:"max_size"`
-	Firmware          string   `json:"firmware"`
-	SecureBoot        bool     `json:"secure_boot"`
-	NVRAMTemplate     string   `json:"nvram_template"`
-	TPM               bool     `json:"tpm"`
-	PCIDevices        []string `json:"pci_devices"`
+	URI                string            `json:"uri"`
+	PoolName           string            `json:"pool_name"`
+	BaseVolumeName     string            `json:"base_volume_name"`
+	VCPUCount          int               `json:"vcpu_count"`
+	MemoryMiB          int               `json:"memory_mib"`
+	DiskSizeGiB        int               `json:"disk_size_gib"`
+	NamePrefix         string            `json:"name_prefix"`
+	Title              string            `json:"title"`
+	NetworkName        string            `json:"network_name"`
+	ResourcePartition  string            `json:"resource_partition"`
+	LockFile           string            `json:"lock_file"`
+	AdmitCommand       string            `json:"admit_command"`
+	MaxSize            int               `json:"max_size"`
+	Firmware           string            `json:"firmware"`
+	SecureBoot         bool              `json:"secure_boot"`
+	NVRAMTemplate      string            `json:"nvram_template"`
+	TPM                bool              `json:"tpm"`
+	PCIDevices         []string          `json:"pci_devices"`
+	NWFilter           string            `json:"nwfilter"`
+	NWFilterParameters map[string]string `json:"nwfilter_parameters"`
 }
 
 // UnmarshalJSON decodes strictly but defers the error to Init, so a bad key
@@ -110,6 +114,10 @@ func (c *Config) normalize() error {
 		return errors.New("plugin_config.nvram_template is required with firmware = \"efi\": name the volume in pool_name that each instance's NVRAM is cloned from")
 	case c.NVRAMTemplate != "" && c.Firmware != firmwareEFI:
 		return errors.New("plugin_config.nvram_template requires firmware = \"efi\"")
+	case c.NWFilter == "" && len(c.NWFilterParameters) > 0:
+		return errors.New("plugin_config.nwfilter_parameters requires nwfilter: name the libvirt nwfilter they are passed to")
+	case c.NWFilter != "" && slices.Contains(slices.Collect(maps.Keys(c.NWFilterParameters)), ""):
+		return errors.New("plugin_config.nwfilter_parameters names must not be empty")
 	case c.AdmitCommand != "" && c.LockFile == "":
 		return errors.New("plugin_config.admit_command requires lock_file: the lock spans the command and the VM start")
 	case strings.ContainsAny(c.Title, "\r\n"):

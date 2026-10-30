@@ -396,3 +396,17 @@ func (c *libvirtClient) ActiveDomainsXML(ctx context.Context) ([]string, error) 
 	}
 	return out, nil
 }
+
+func (c *libvirtClient) NWFilterExists(ctx context.Context, name string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := c.ensure(); err != nil {
+		return err
+	}
+	_, err := c.cur().NwfilterLookupByName(name)
+	if hasCode(err, libvirt.ErrNoNwfilter) {
+		return ErrNotFound
+	}
+	return err
+}

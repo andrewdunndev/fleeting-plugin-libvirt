@@ -1540,3 +1540,57 @@ func TestURITransport(t *testing.T) {
 		})
 	}
 }
+
+func TestNWFilterConfig(t *testing.T) {
+	c := baseConfig()
+	c.NWFilterParameters = map[string]string{"CTRL_IP_LEARNING": "dhcp"}
+	if err := c.normalize(); err == nil || !strings.Contains(err.Error(), "nwfilter_parameters requires nwfilter") {
+		t.Fatalf("err=%v", err)
+	}
+	c.NWFilter = "clean-traffic"
+	if err := c.normalize(); err != nil {
+		t.Fatal(err)
+	}
+	c.NWFilterParameters = map[string]string{"": "x"}
+	if err := c.normalize(); err == nil || !strings.Contains(err.Error(), "names must not be empty") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestInitChecksNWFilterExists(t *testing.T) {
+	c := baseConfig()
+	c.NWFilter = "clean-traffic"
+	f := newFake()
+	err := initWith(t, c, f)
+	if err == nil || !f.closed || !strings.Contains(err.Error(), `nwfilter "clean-traffic"`) {
+		t.Fatalf("err=%v closed=%v", err, f.closed)
+	}
+	f = newFake()
+	f.nwfilters = map[string]bool{"clean-traffic": true}
+	if err := initWith(t, c, f); err != nil {
+		t.Fatal(err)
+	}
+	if err := initWith(t, baseConfig(), newFake()); err != nil {
+		t.Fatalf("unset nwfilter must not be looked up: %v", err)
+	}
+}
+
+func TestNWFilterReachesDomainXML(t *testing.T) {
+	c := baseConfig()
+	c.NWFilter = "clean-traffic"
+	c.NWFilterParameters = map[string]string{"CTRL_IP_LEARNING": "dhcp"}
+	f := newFake()
+	f.nwfilters = map[string]bool{"clean-traffic": true}
+	g := &InstanceGroup{Config: c, connect: func(string) (Client, error) { return f, nil }}
+	if _, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{ConnectorConfig: provider.ConnectorConfig{Username: "root", UseStaticCredentials: true}}); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := g.Increase(context.Background(), 1); err != nil || n != 1 {
+		t.Fatalf("Increase = %d %v", n, err)
+	}
+	for _, d := range f.domains {
+		if !strings.Contains(d.xml, `<filterref filter="clean-traffic">`) {
+			t.Fatalf("no filterref: %s", d.xml)
+		}
+	}
+}

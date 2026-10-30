@@ -69,4 +69,6 @@ type Client interface {
 	// NodeDeviceXML returns the description of a libvirt node device by name,
 	// such as pci_0000_03_00_0.
 	NodeDeviceXML(ctx context.Context, name string) (string, error)
+	// NWFilterExists returns ErrNotFound when no nwfilter has the name.
+	NWFilterExists(ctx context.Context, name string) error
 }

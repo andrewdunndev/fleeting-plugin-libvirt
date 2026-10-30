@@ -49,6 +49,8 @@ type fakeClient struct {
 	capsErr   error
 	capsCalls []string
 	// nodeDevices answers NodeDeviceXML by node-device name.
+	// nwfilters is the set of filter names NWFilterExists finds.
+	nwfilters   map[string]bool
 	nodeDevices map[string]string
 	nodeReads   []string
 	activeReads int
@@ -286,4 +288,11 @@ func (f *fakeClient) ActiveDomainsXML(context.Context) ([]string, error) {
 	}
 	sort.Strings(out)
 	return out, f.activeErr
+}
+
+func (f *fakeClient) NWFilterExists(_ context.Context, name string) error {
+	if !f.nwfilters[name] {
+		return ErrNotFound
+	}
+	return nil
 }

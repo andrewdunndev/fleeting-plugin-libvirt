@@ -116,6 +116,12 @@ func (g *InstanceGroup) Init(ctx context.Context, log hclog.Logger, settings pro
 			return provider.ProviderInfo{}, err
 		}
 	}
+	if g.NWFilter != "" {
+		if err := client.NWFilterExists(ctx, g.NWFilter); err != nil {
+			_ = client.Close()
+			return provider.ProviderInfo{}, fmt.Errorf("nwfilter %q: %w; check plugin_config.nwfilter against virsh nwfilter-list", g.NWFilter, err)
+		}
+	}
 	g.client = client
 
 	return provider.ProviderInfo{
@@ -279,6 +285,7 @@ func (g *InstanceGroup) createOne(ctx context.Context, tried map[string]bool) er
 	spec := domainSpec{
 		Name: name, Title: g.Title, Prefix: g.NamePrefix,
 		Partition: g.ResourcePartition, Network: g.NetworkName, DiskPath: path,
+		NWFilter: g.NWFilter, NWFilterParams: g.NWFilterParameters,
 		VCPU: g.VCPUCount, MemoryMiB: g.MemoryMiB,
 		Firmware: g.Firmware, SecureBoot: g.SecureBoot, TPM: g.TPM,
 	}

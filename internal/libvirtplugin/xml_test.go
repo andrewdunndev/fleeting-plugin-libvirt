@@ -198,3 +198,21 @@ func TestParseDomainCaps(t *testing.T) {
 		t.Fatal("malformed XML accepted")
 	}
 }
+
+func TestDomainXMLNWFilter(t *testing.T) {
+	s := fullSpec()
+	s.NWFilter = "clean-traffic"
+	s.NWFilterParams = map[string]string{"DHCPSERVER": "192.0.2.1", "CTRL_IP_LEARNING": "dhcp"}
+	got, err := domainXML(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `<model type="virtio"></model><filterref filter="clean-traffic"><parameter name="CTRL_IP_LEARNING" value="dhcp"></parameter><parameter name="DHCPSERVER" value="192.0.2.1"></parameter></filterref></interface>`
+	if !strings.Contains(got, want) {
+		t.Fatalf("filterref missing or misplaced: %s", got)
+	}
+	s.NWFilter, s.NWFilterParams = "", nil
+	if got, _ := domainXML(s); got != goldenDomain || strings.Contains(got, "filterref") {
+		t.Fatalf("filterref present without the key: %s", got)
+	}
+}

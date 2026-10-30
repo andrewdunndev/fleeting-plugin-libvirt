@@ -112,6 +112,8 @@ An unknown key fails Init and names the key.
 | `memory_mib` | 4096 | memory per instance |
 | `disk_size_gib` | base size | overlay size, never below the base volume |
 | `network_name` | `default` | libvirt network for the one interface |
+| `nwfilter` | none | name of an existing libvirt nwfilter; each instance's interface gets `<filterref filter='NAME'>`. Init fails naming the filter when libvirt has none by that name. See Guest network |
+| `nwfilter_parameters` | none | string map passed to the filter as `<parameter name= value=/>`; requires `nwfilter` |
 | `title` | none | domain `<title>`, one line |
 | `resource_partition` | none | cgroup partition such as `/machine/ci`; it must exist |
 | `lock_file` | none | held across admission, volume creation and start of each instance; waiting longer than five minutes for it refuses that Increase. Use a directory that is not sticky and world-writable (for example under `/run`), shared by every account that runs the plugin |
@@ -120,6 +122,22 @@ An unknown key fails Init and names the key.
 `admit_command` sees `FLEETING_LIBVIRT_NAME`, `FLEETING_LIBVIRT_MEMORY_MIB` and
 `FLEETING_LIBVIRT_VCPU_COUNT`. A refusal stops Increase; the instances already
 started are returned without an error, and fleeting asks again later.
+
+### Guest network
+
+fleeting does not verify guest host keys, so a guest that answers a sibling's address receives that sibling's session. Port isolation on the network does not stop a guest's ARP reply reaching the host; only an nwfilter does. Attach `clean-traffic` and learn each address from DHCP, not from the first packet seen:
+
+```toml
+[runners.autoscaler.plugin_config]
+  network_name = "ci"
+  nwfilter = "clean-traffic"
+
+  [runners.autoscaler.plugin_config.nwfilter_parameters]
+    CTRL_IP_LEARNING = "dhcp"
+    DHCPSERVER = "<address of the network's DHCP server>"
+```
+
+Without `CTRL_IP_LEARNING = "dhcp"` libvirt defaults to `any`, which locks an interface to the first address it sends from, so a guest can claim a sibling's address before the sibling's first packet. With `dhcp` only an address leased to the interface is allowed. `DHCPSERVER` names the trusted DHCP server, so a rogue server in a guest cannot hand out a sibling's address. With an SR-IOV `pci_devices` passthrough the interface is not filtered by libvirt; set VF `spoofchk on` on the host instead.
 
 ### TPM
 

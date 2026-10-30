@@ -3,27 +3,30 @@ package libvirtplugin
 import (
 	"encoding/xml"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 )
 
 type domainSpec struct {
-	Name          string
-	Title         string
-	Prefix        string
-	Partition     string
-	Network       string
-	DiskPath      string
-	VCPU          int
-	MemoryMiB     int
-	CredentialKey string // credential name; empty seeds nothing
-	Firmware      string // "efi" selects libvirt firmware autoselection
-	SecureBoot    bool
-	NVRAMPath     string
-	NVRAMFormat   string
-	TPM           bool
-	PCIAddress    string // lower-case PCI address of the hostdev; empty adds none
-	AuthorizedKey string
+	Name           string
+	Title          string
+	Prefix         string
+	Partition      string
+	Network        string
+	NWFilter       string // empty attaches no filter
+	NWFilterParams map[string]string
+	DiskPath       string
+	VCPU           int
+	MemoryMiB      int
+	CredentialKey  string // credential name; empty seeds nothing
+	Firmware       string // "efi" selects libvirt firmware autoselection
+	SecureBoot     bool
+	NVRAMPath      string
+	NVRAMFormat    string
+	TPM            bool
+	PCIAddress     string // lower-case PCI address of the hostdev; empty adds none
+	AuthorizedKey  string
 }
 
 type typeAttr struct {
@@ -168,7 +171,18 @@ type interfaceDoc struct {
 	Source struct {
 		Network string `xml:"network,attr"`
 	} `xml:"source"`
-	Model typeAttr `xml:"model"`
+	Model     typeAttr      `xml:"model"`
+	FilterRef *filterRefDoc `xml:"filterref"`
+}
+
+type filterRefDoc struct {
+	Filter     string           `xml:"filter,attr"`
+	Parameters []filterParamDoc `xml:"parameter"`
+}
+
+type filterParamDoc struct {
+	Name  string `xml:"name,attr"`
+	Value string `xml:"value,attr"`
 }
 
 type channelDoc struct {
@@ -275,6 +289,13 @@ func domainXML(s domainSpec) (string, error) {
 	d.Devices.Disk.Target.Dev, d.Devices.Disk.Target.Bus = "vda", "virtio"
 	d.Devices.Interface = interfaceDoc{Type: "network", Model: typeAttr{Type: "virtio"}}
 	d.Devices.Interface.Source.Network = s.Network
+	if s.NWFilter != "" {
+		ref := &filterRefDoc{Filter: s.NWFilter}
+		for _, k := range slices.Sorted(maps.Keys(s.NWFilterParams)) {
+			ref.Parameters = append(ref.Parameters, filterParamDoc{Name: k, Value: s.NWFilterParams[k]})
+		}
+		d.Devices.Interface.FilterRef = ref
+	}
 	d.Devices.Channel.Type = "unix"
 	d.Devices.Channel.Target.Type, d.Devices.Channel.Target.Name = "virtio", guestAgentChannel
 	d.Devices.Serial.Type = "pty"
