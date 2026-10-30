@@ -1169,8 +1169,10 @@ func TestInitNVRAMTemplateRules(t *testing.T) {
 		want   string
 	}{
 		{"template volume absent", func(f *fakeClient) { f.templateErr = ErrNotFound }, "nvram template"},
-		{"template format unsupported", func(f *fakeClient) { f.template.Format = "vmdk" }, "qcow2 or raw"},
-		{"template format unreported", func(f *fakeClient) { f.template.Format = "" }, "qcow2 or raw"},
+		{"template format raw", func(f *fakeClient) { f.template.Format = "raw" }, `"tmpl" has format "raw"; plugin_config.nvram_template must be a qcow2 volume`},
+		{"template format other", func(f *fakeClient) { f.template.Format = "vmdk" }, `has format "vmdk"; plugin_config.nvram_template must be a qcow2 volume`},
+		{"template format unreported", func(f *fakeClient) { f.template.Format = "" }, `has format ""; plugin_config.nvram_template must be a qcow2 volume`},
+		{"template format qcow2", func(f *fakeClient) { f.template.Format = "qcow2" }, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1178,6 +1180,12 @@ func TestInitNVRAMTemplateRules(t *testing.T) {
 			tc.mutate(f)
 			g := &InstanceGroup{Config: efiConfig(), connect: func(string) (Client, error) { return f, nil }}
 			_, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{})
+			if tc.want == "" {
+				if err != nil || f.closed {
+					t.Fatalf("err=%v closed=%v", err, f.closed)
+				}
+				return
+			}
 			if err == nil || !strings.Contains(err.Error(), tc.want) || !f.closed {
 				t.Fatalf("err=%v closed=%v", err, f.closed)
 			}
@@ -1222,7 +1230,6 @@ func TestBIOSNeverTouchesNVRAM(t *testing.T) {
 
 func TestIncreaseClonesTemplateIntoNVRAMBeforeDomain(t *testing.T) {
 	f := newFake()
-	f.template.Format = "raw"
 	g := &InstanceGroup{Config: efiConfig(), connect: func(string) (Client, error) { return f, nil }}
 	if _, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{}); err != nil {
 		t.Fatal(err)
@@ -1240,10 +1247,10 @@ func TestIncreaseClonesTemplateIntoNVRAMBeforeDomain(t *testing.T) {
 		if _, ok := f.volumes[nv]; !ok || f.clones[0] != "tmpl>"+nv {
 			t.Fatalf("volumes=%v clones=%v", f.volumes, f.clones)
 		}
-		if !g.ownsName(nv) || !strings.Contains(d.xml, `<nvram format="raw">/pool/`+nv+`</nvram>`) {
+		if !g.ownsName(nv) || !strings.Contains(d.xml, `<nvram format="qcow2">/pool/`+nv+`</nvram>`) {
 			t.Fatalf("ownership or xml: %s", d.xml)
 		}
-		if !strings.Contains(f.volumes[nv], `<format type="raw">`) {
+		if !strings.Contains(f.volumes[nv], `<format type="qcow2">`) {
 			t.Fatalf("clone XML: %s", f.volumes[nv])
 		}
 	}

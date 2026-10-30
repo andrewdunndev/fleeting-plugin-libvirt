@@ -31,7 +31,7 @@ Set `FLEETING_PLUGIN_PATH` to the same directory when you install and when you r
 
 - A KVM host, and read and write access to the libvirt socket for the account running the plugin.
 - For `firmware = "efi"`, libvirt 9.2.0 or newer on the host, checked at Init, and OVMF qcow2 firmware descriptors installed.
-- For `firmware = "efi"`, an NVRAM template volume in the pool: a qcow2 or raw copy of the firmware variable store, with the keys the guest should trust enrolled (a custom PK and db made with virt-fw-vars for `secure_boot`).
+- For `firmware = "efi"`, an NVRAM template volume in the pool: a qcow2 copy of the firmware variable store, with the keys the guest should trust enrolled (a custom PK and db made with virt-fw-vars for `secure_boot`). Convert a raw store before uploading it to the pool: `qemu-img convert -f raw -O qcow2 <in> <out>`.
 - A base image as described under Guest in How it behaves.
 
 ### Verify a release
@@ -103,7 +103,7 @@ An unknown key fails Init and names the key.
 | `max_size` | unbounded | upper bound on instances; the scaler's own cap applies either way |
 | `firmware` | `bios` | `bios` for the legacy BIOS domain, or `efi` for libvirt firmware autoselection on machine `q35` with a qcow2 loader and secure boot off |
 | `secure_boot` | `false` | requires `firmware = "efi"`; selects secure-boot firmware with `enrolled-keys` off and turns SMM on |
-| `nvram_template` | none | required with `firmware = "efi"`, rejected otherwise; a qcow2 or raw volume in `pool_name`. Each instance gets a clone named `<domain>.nvram`, in the template's format, made before the domain is defined and deleted with it |
+| `nvram_template` | none | required with `firmware = "efi"`, rejected otherwise; a qcow2 volume in `pool_name`; any other format fails Init. Each instance gets a clone named `<domain>.nvram`, made before the domain is defined and deleted with it |
 | `vcpu_count` | 2 | vCPUs per instance |
 | `memory_mib` | 4096 | memory per instance |
 | `disk_size_gib` | base size | overlay size, never below the base volume |

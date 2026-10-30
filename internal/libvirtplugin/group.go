@@ -99,9 +99,9 @@ func (g *InstanceGroup) Init(ctx context.Context, log hclog.Logger, settings pro
 			_ = client.Close()
 			return provider.ProviderInfo{}, fmt.Errorf("nvram template %q in pool %q: %w; check plugin_config.nvram_template, and refresh the pool if the volume was just added", g.NVRAMTemplate, g.PoolName, err)
 		}
-		if tmpl.Format != "qcow2" && tmpl.Format != "raw" {
+		if tmpl.Format != "qcow2" {
 			_ = client.Close()
-			return provider.ProviderInfo{}, fmt.Errorf("nvram template %q has format %q; plugin_config.nvram_template must be a qcow2 or raw volume", g.NVRAMTemplate, tmpl.Format)
+			return provider.ProviderInfo{}, fmt.Errorf("nvram template %q has format %q; plugin_config.nvram_template must be a qcow2 volume, the format the loader is steered to (convert with qemu-img convert -f raw -O qcow2 <in> <out>)", g.NVRAMTemplate, tmpl.Format)
 		}
 	}
 	g.client = client
