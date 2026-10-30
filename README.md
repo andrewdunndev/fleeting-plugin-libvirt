@@ -50,6 +50,8 @@ cosign verify \
 ```toml
 [runners.autoscaler]
   plugin = "registry.gitlab.com/dunn.dev/fleeting-plugin-libvirt:0.1"
+  capacity_per_instance = 1
+  max_use_count = 1
 
   [runners.autoscaler.plugin_config]
     pool_name = "images"
@@ -59,6 +61,8 @@ cosign verify \
   [runners.autoscaler.connector_config]
     username = "root"
 ```
+
+The isolation statements in this document assume one job per instance, which `capacity_per_instance = 1` and `max_use_count = 1` enforce; gitlab-runner reuses an instance indefinitely when `max_use_count` is unset.
 
 ## Use with forgehand
 
@@ -90,7 +94,7 @@ protocol = "ssh"
 username = "runner"
 ```
 
-`name_prefix` must differ from every other daemon's on the same libvirt.
+`name_prefix` must differ from every other plugin instance on the same libvirt, meaning each `[[runners]]` entry and each forgehand scale set.
 
 ## Configuration
 
@@ -98,7 +102,7 @@ An unknown key fails Init and names the key.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `uri` | `qemu:///system` | libvirt URI |
+| `uri` | `qemu:///system` | local libvirt URI: `qemu:///system`, `qemu:///session` or `qemu+unix:///system?socket=PATH`; remote transports are refused |
 | `pool_name` | required | storage pool of the base volume and the overlays |
 | `base_volume_name` | required | volume that instances clone |
 | `name_prefix` | required | must end in `-`; every domain and volume is named `<prefix><tag>-<id>` |
