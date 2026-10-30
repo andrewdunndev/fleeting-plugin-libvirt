@@ -23,6 +23,16 @@ type DomainInfo struct {
 	Prefix string
 }
 
+// DomainCaps is the part of libvirt's domain capabilities the plugin checks.
+type DomainCaps struct {
+	TPM         bool
+	TPMModels   []string
+	TPMBackends []string
+	TPMVersions []string
+	PCIHostdev  bool
+	PCIBackends []string
+}
+
 // Client is the slice of libvirt the plugin uses.
 type Client interface {
 	Close() error
@@ -50,4 +60,7 @@ type Client interface {
 	// domain's own MAC, for guests without an agent on a libvirt-managed
 	// network.
 	LeaseAddresses(ctx context.Context, name string) ([]string, error)
+	// DomainCaps returns the connection's domain capabilities for virt type kvm
+	// and the given machine type, empty for libvirt's default.
+	DomainCaps(ctx context.Context, machine string) (DomainCaps, error)
 }

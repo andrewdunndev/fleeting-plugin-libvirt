@@ -343,3 +343,21 @@ func (c *libvirtClient) CloneVolume(ctx context.Context, pool, src, _, xml strin
 	}
 	return path, nil
 }
+
+func (c *libvirtClient) DomainCaps(ctx context.Context, machine string) (DomainCaps, error) {
+	if err := ctx.Err(); err != nil {
+		return DomainCaps{}, err
+	}
+	if err := c.ensure(); err != nil {
+		return DomainCaps{}, err
+	}
+	var m libvirt.OptString
+	if machine != "" {
+		m = libvirt.OptString{machine}
+	}
+	s, err := c.cur().ConnectGetDomainCapabilities(nil, nil, m, libvirt.OptString{"kvm"}, 0)
+	if err != nil {
+		return DomainCaps{}, err
+	}
+	return parseDomainCaps(s)
+}

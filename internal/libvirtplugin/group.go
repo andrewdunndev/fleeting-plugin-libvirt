@@ -11,6 +11,7 @@ import (
 	"net/netip"
 	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -102,6 +103,12 @@ func (g *InstanceGroup) Init(ctx context.Context, log hclog.Logger, settings pro
 		if tmpl.Format != "qcow2" {
 			_ = client.Close()
 			return provider.ProviderInfo{}, fmt.Errorf("nvram template %q has format %q; plugin_config.nvram_template must be a qcow2 volume, the format the loader is steered to (convert with qemu-img convert -f raw -O qcow2 <in> <out>)", g.NVRAMTemplate, tmpl.Format)
+		}
+	}
+	if g.TPM {
+		if err := g.checkHardware(ctx, client); err != nil {
+			_ = client.Close()
+			return provider.ProviderInfo{}, err
 		}
 	}
 	g.client = client
@@ -254,7 +261,7 @@ func (g *InstanceGroup) createOne(ctx context.Context) error {
 		Name: name, Title: g.Title, Prefix: g.NamePrefix,
 		Partition: g.ResourcePartition, Network: g.NetworkName, DiskPath: path,
 		VCPU: g.VCPUCount, MemoryMiB: g.MemoryMiB,
-		Firmware: g.Firmware, SecureBoot: g.SecureBoot,
+		Firmware: g.Firmware, SecureBoot: g.SecureBoot, TPM: g.TPM,
 	}
 	if g.NVRAMTemplate != "" {
 		tmpl, err := g.client.BaseVolume(ctx, g.PoolName, g.NVRAMTemplate)
@@ -531,4 +538,23 @@ func (g *InstanceGroup) Shutdown(context.Context) error {
 		return nil
 	}
 	return g.client.Close()
+}
+
+// checkHardware reads the connection's domain capabilities once and checks
+// each hardware key against them.
+func (g *InstanceGroup) checkHardware(ctx context.Context, client Client) error {
+	machine := ""
+	if g.Firmware == firmwareEFI {
+		machine = "q35"
+	}
+	caps, err := client.DomainCaps(ctx, machine)
+	if err != nil {
+		return fmt.Errorf("reading domain capabilities for plugin_config.tpm: %w", err)
+	}
+	ok := caps.TPM && slices.Contains(caps.TPMModels, "tpm-tis") &&
+		slices.Contains(caps.TPMBackends, "emulator") && slices.Contains(caps.TPMVersions, "2.0")
+	if g.TPM && !ok {
+		return errors.New("plugin_config.tpm needs libvirt 8.6.0 or newer with swtpm installed on the host, offering model tpm-tis and an emulator backend at version 2.0; install swtpm and swtpm-tools, or unset tpm")
+	}
+	return nil
 }

@@ -44,6 +44,10 @@ type fakeClient struct {
 	afterListVolumes func()
 	// onCreateDomain runs when a domain start begins.
 	onCreateDomain func()
+	// caps answers DomainCaps; nil reads as a host with everything.
+	caps           *DomainCaps
+	capsErr        error
+	capsCalls      []string
 	closed         bool
 	destroyed      []string
 	deletedVolumes []string
@@ -70,6 +74,19 @@ func (f *fakeClient) LibVersion(context.Context) (uint64, error) {
 		return 10010000, nil
 	}
 	return f.libVersion, nil
+}
+
+func (f *fakeClient) DomainCaps(_ context.Context, machine string) (DomainCaps, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.capsCalls = append(f.capsCalls, machine)
+	if f.capsErr != nil {
+		return DomainCaps{}, f.capsErr
+	}
+	if f.caps != nil {
+		return *f.caps, nil
+	}
+	return parseDomainCaps(fullCapsXML)
 }
 
 func (f *fakeClient) BaseVolume(_ context.Context, _, name string) (Base, error) {
@@ -219,3 +236,8 @@ func parseDomainForTest(xml string) DomainInfo {
 	}
 	return d
 }
+
+const fullCapsXML = `<domainCapabilities><devices>
+<hostdev supported='yes'><enum name='mode'><value>subsystem</value></enum><enum name='subsysType'><value>usb</value><value>pci</value></enum><enum name='pciBackend'><value>default</value><value>vfio</value></enum></hostdev>
+<tpm supported='yes'><enum name='model'><value>tpm-tis</value><value>tpm-crb</value></enum><enum name='backendModel'><value>passthrough</value><value>emulator</value></enum><enum name='backendVersion'><value>2.0</value></enum></tpm>
+</devices></domainCapabilities>`

@@ -1,6 +1,7 @@
 package libvirtplugin
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -158,5 +159,42 @@ func TestNVRAMVolumeXMLGolden(t *testing.T) {
 	const want = `<volume><name>job-a-1.nvram</name><capacity unit="bytes">540672</capacity><target><format type="raw"></format></target></volume>`
 	if got != want {
 		t.Fatalf("got %s\nwant %s", got, want)
+	}
+}
+
+func TestDomainXMLTPM(t *testing.T) {
+	s := fullSpec()
+	s.TPM = true
+	got, _ := domainXML(s)
+	want := `<tpm model="tpm-tis"><backend type="emulator" version="2.0"></backend></tpm>`
+	if !strings.Contains(got, want) {
+		t.Fatalf("tpm element missing: %s", got)
+	}
+	if strings.Contains(got, "persistent_state") {
+		t.Fatalf("tpm state must not persist: %s", got)
+	}
+	s.TPM = false
+	if got, _ := domainXML(s); got != goldenDomain || strings.Contains(got, "<tpm") {
+		t.Fatalf("tpm element present without the key: %s", got)
+	}
+}
+
+func TestParseDomainCaps(t *testing.T) {
+	c, err := parseDomainCaps(fullCapsXML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.TPM || !slices.Equal(c.TPMModels, []string{"tpm-tis", "tpm-crb"}) ||
+		!slices.Equal(c.TPMBackends, []string{"passthrough", "emulator"}) ||
+		!slices.Equal(c.TPMVersions, []string{"2.0"}) ||
+		!c.PCIHostdev || !slices.Equal(c.PCIBackends, []string{"default", "vfio"}) {
+		t.Fatalf("caps = %+v", c)
+	}
+	c, err = parseDomainCaps(`<domainCapabilities><devices><tpm supported='no'/><hostdev supported='yes'><enum name='subsysType'><value>usb</value></enum></hostdev></devices></domainCapabilities>`)
+	if err != nil || c.TPM || c.PCIHostdev || len(c.TPMModels) != 0 {
+		t.Fatalf("unsupported caps = %+v %v", c, err)
+	}
+	if _, err := parseDomainCaps("<domainCapabilities>"); err == nil {
+		t.Fatal("malformed XML accepted")
 	}
 }

@@ -3,6 +3,7 @@ package libvirtplugin
 import (
 	"encoding/xml"
 	"fmt"
+	"slices"
 )
 
 type domainSpec struct {
@@ -19,6 +20,7 @@ type domainSpec struct {
 	SecureBoot    bool
 	NVRAMPath     string
 	NVRAMFormat   string
+	TPM           bool
 	AuthorizedKey string
 }
 
@@ -137,6 +139,7 @@ type devicesDoc struct {
 	Serial    serialDoc    `xml:"serial"`
 	Console   consoleDoc   `xml:"console"`
 	RNG       rngDoc       `xml:"rng"`
+	TPM       *tpmDoc      `xml:"tpm,omitempty"`
 }
 
 type diskDoc struct {
@@ -196,6 +199,14 @@ type rngDoc struct {
 	} `xml:"backend"`
 }
 
+type tpmDoc struct {
+	Model   string `xml:"model,attr"`
+	Backend struct {
+		Type    string `xml:"type,attr"`
+		Version string `xml:"version,attr"`
+	} `xml:"backend"`
+}
+
 const guestAgentChannel = "org.qemu.guest_agent.0"
 
 func domainXML(s domainSpec) (string, error) {
@@ -252,6 +263,11 @@ func domainXML(s domainSpec) (string, error) {
 	d.Devices.Console.Target.Type = "serial"
 	d.Devices.RNG.Model = "virtio"
 	d.Devices.RNG.Backend.Model, d.Devices.RNG.Backend.Path = "random", "/dev/urandom"
+
+	if s.TPM {
+		d.Devices.TPM = &tpmDoc{Model: "tpm-tis"}
+		d.Devices.TPM.Backend.Type, d.Devices.TPM.Backend.Version = "emulator", "2.0"
+	}
 
 	b, err := xml.Marshal(d)
 	if err != nil {
@@ -346,4 +362,40 @@ func nvramXML(name, format string, capacity uint64) (string, error) {
 		return "", fmt.Errorf("building NVRAM volume XML: %w", err)
 	}
 	return string(b), nil
+}
+
+// parseDomainCaps reads the TPM and PCI hostdev enumerations from libvirt's
+// domain capabilities.
+func parseDomainCaps(s string) (DomainCaps, error) {
+	type enum struct {
+		Name   string   `xml:"name,attr"`
+		Values []string `xml:"value"`
+	}
+	type feature struct {
+		Supported string `xml:"supported,attr"`
+		Enums     []enum `xml:"enum"`
+	}
+	var c struct {
+		TPM     feature `xml:"devices>tpm"`
+		Hostdev feature `xml:"devices>hostdev"`
+	}
+	if err := xml.Unmarshal([]byte(s), &c); err != nil {
+		return DomainCaps{}, fmt.Errorf("parsing domain capabilities: %w", err)
+	}
+	vals := func(f feature, name string) []string {
+		for _, e := range f.Enums {
+			if e.Name == name {
+				return e.Values
+			}
+		}
+		return nil
+	}
+	return DomainCaps{
+		TPM:         c.TPM.Supported == "yes",
+		TPMModels:   vals(c.TPM, "model"),
+		TPMBackends: vals(c.TPM, "backendModel"),
+		TPMVersions: vals(c.TPM, "backendVersion"),
+		PCIHostdev:  c.Hostdev.Supported == "yes" && slices.Contains(vals(c.Hostdev, "subsysType"), "pci"),
+		PCIBackends: vals(c.Hostdev, "pciBackend"),
+	}, nil
 }

@@ -104,6 +104,7 @@ An unknown key fails Init and names the key.
 | `firmware` | `bios` | `bios` for the legacy BIOS domain, or `efi` for libvirt firmware autoselection on machine `q35` with a qcow2 loader and secure boot off |
 | `secure_boot` | `false` | requires `firmware = "efi"`; selects secure-boot firmware with `enrolled-keys` off and turns SMM on |
 | `nvram_template` | none | required with `firmware = "efi"`, rejected otherwise; a qcow2 volume in `pool_name`; any other format fails Init. Each instance gets a clone named `<domain>.nvram`, made before the domain is defined and deleted with it |
+| `tpm` | `false` | adds a TPM 2.0 (model `tpm-tis`, swtpm emulator) to each instance; Init fails unless libvirt 8.6.0 or newer reports it, which needs swtpm and swtpm-tools on the host |
 | `vcpu_count` | 2 | vCPUs per instance |
 | `memory_mib` | 4096 | memory per instance |
 | `disk_size_gib` | base size | overlay size, never below the base volume |
@@ -117,9 +118,9 @@ An unknown key fails Init and names the key.
 `FLEETING_LIBVIRT_VCPU_COUNT`. A refusal stops Increase; the instances already
 started are returned without an error, and fleeting asks again later.
 
-### No tpm key
+### TPM
 
-There is no `tpm` key. Cairn's sealed-boot evidence only covers boots with swtpm attached, and the lab round boots a sealed image without one; a TPM2 keyslot is bound to one TPM's state, which a fresh per-instance emulator cannot reproduce. Use an image whose disk unlock needs no TPM. A `tpm` key fails Init as unknown.
+The vTPM does not replace the host TPM a disk was enrolled to: a TPM2 keyslot is bound to one TPM's state, which a fresh per-instance emulator cannot reproduce, so a `tpm2-luks` sealed image will not unlock in a second instance. Runner images use a direct block setup. libvirt deletes the TPM state when it stops the domain, but leaves a per-VM swtpm log on the host, and the state of a VM lost without libvirt's stop path persists; clean both by age on the host.
 
 ### Secure boot hazard
 

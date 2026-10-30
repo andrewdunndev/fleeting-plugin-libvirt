@@ -47,6 +47,7 @@ type Config struct {
 	Firmware          string `json:"firmware"`
 	SecureBoot        bool   `json:"secure_boot"`
 	NVRAMTemplate     string `json:"nvram_template"`
+	TPM               bool   `json:"tpm"`
 }
 
 // UnmarshalJSON decodes strictly but defers the error to Init, so a bad key

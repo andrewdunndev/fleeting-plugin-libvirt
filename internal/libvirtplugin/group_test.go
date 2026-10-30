@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -1385,18 +1386,6 @@ func TestUpdateKeepsLiveNVRAMAndSweepsOrphanNVRAM(t *testing.T) {
 	}
 }
 
-func TestTPMKeyFailsInitAsUnknown(t *testing.T) {
-	raw := `{"pool_name":"p","base_volume_name":"b","name_prefix":"job-","max_size":1,"tpm":true}`
-	g := &InstanceGroup{connect: func(string) (Client, error) { return newFake(), nil }}
-	if err := json.Unmarshal([]byte(raw), g); err != nil {
-		t.Fatal(err)
-	}
-	_, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{})
-	if err == nil || !strings.Contains(err.Error(), `"tpm"`) {
-		t.Fatalf("err=%v", err)
-	}
-}
-
 func TestQcow2TemplateCarriesFormatAndCapacityIntoCloneAndDomain(t *testing.T) {
 	f := newFake()
 	f.template.Format, f.template.CapacityBytes = "qcow2", 540672
@@ -1428,5 +1417,82 @@ func TestCreateFailsAndDeletesDiskWhenTemplateUnreadable(t *testing.T) {
 	}
 	if len(f.volumes) != 0 || len(f.clones) != 0 || len(f.domains) != 0 {
 		t.Fatalf("leaked volumes=%v clones=%v domains=%d", f.volumes, f.clones, len(f.domains))
+	}
+}
+
+func tpmConfig() Config {
+	c := baseConfig()
+	c.TPM = true
+	return c
+}
+
+func initWith(t *testing.T, c Config, f *fakeClient) error {
+	t.Helper()
+	g := &InstanceGroup{Config: c, connect: func(string) (Client, error) { return f, nil }}
+	_, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{})
+	return err
+}
+
+func TestInitReadsCapsOnlyForHardwareKeys(t *testing.T) {
+	f := newFake()
+	if err := initWith(t, baseConfig(), f); err != nil || len(f.capsCalls) != 0 {
+		t.Fatalf("err=%v calls=%v", err, f.capsCalls)
+	}
+	if err := initWith(t, tpmConfig(), f); err != nil || len(f.capsCalls) != 1 || f.capsCalls[0] != "" {
+		t.Fatalf("err=%v calls=%v", err, f.capsCalls)
+	}
+	c := tpmConfig()
+	c.Firmware, c.NVRAMTemplate = firmwareEFI, "tmpl"
+	f = newFake()
+	if err := initWith(t, c, f); err != nil || len(f.capsCalls) != 1 || f.capsCalls[0] != "q35" {
+		t.Fatalf("err=%v calls=%v", err, f.capsCalls)
+	}
+}
+
+func TestInitFailsWhenTPMUnsupported(t *testing.T) {
+	cases := map[string]DomainCaps{
+		"unsupported": {TPMModels: []string{"tpm-tis"}, TPMBackends: []string{"emulator"}, TPMVersions: []string{"2.0"}},
+		"model":       {TPM: true, TPMModels: []string{"tpm-crb"}, TPMBackends: []string{"emulator"}, TPMVersions: []string{"2.0"}},
+		"backend":     {TPM: true, TPMModels: []string{"tpm-tis"}, TPMBackends: []string{"passthrough"}, TPMVersions: []string{"2.0"}},
+		"version":     {TPM: true, TPMModels: []string{"tpm-tis"}, TPMBackends: []string{"emulator"}, TPMVersions: []string{"1.2"}},
+		"no versions": {TPM: true, TPMModels: []string{"tpm-tis"}, TPMBackends: []string{"emulator"}},
+	}
+	for name, caps := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := newFake()
+			f.caps = &caps
+			err := initWith(t, tpmConfig(), f)
+			if err == nil || !f.closed {
+				t.Fatalf("err=%v closed=%v", err, f.closed)
+			}
+			for _, want := range []string{"plugin_config.tpm", "swtpm", "8.6.0"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("%q missing from %v", want, err)
+				}
+			}
+		})
+	}
+	f := newFake()
+	f.capsErr = errors.New("boom")
+	if err := initWith(t, tpmConfig(), f); err == nil || !strings.Contains(err.Error(), "boom") || !f.closed {
+		t.Fatalf("err=%v closed=%v", err, f.closed)
+	}
+}
+
+func TestTPMDomainCarriesNoVolumeAndVolumesOfUnchanged(t *testing.T) {
+	g, f := newGroup(t, tpmConfig(), true)
+	if n, err := g.Increase(context.Background(), 1); err != nil || n != 1 {
+		t.Fatalf("Increase = %d %v", n, err)
+	}
+	for name, d := range f.domains {
+		if !strings.Contains(d.xml, `<tpm model="tpm-tis"><backend type="emulator" version="2.0">`) {
+			t.Fatalf("domain has no tpm: %s", d.xml)
+		}
+		if got := g.volumesOf(name); !slices.Equal(got, []string{name}) {
+			t.Fatalf("volumesOf = %v", got)
+		}
+	}
+	if len(f.volumes) != 1 {
+		t.Fatalf("volumes = %v", f.volumes)
 	}
 }
