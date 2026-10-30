@@ -38,4 +38,4 @@ disclosure date within thirty days. Please do not open a public issue first.
 
 Guest SSH host keys are not verified, because fleeting's connector ignores
 them. The guest network must stop guests spoofing each other's IP or MAC: use
-VF spoofchk plus port isolation.
+libvirt-native controls: an isolated network or bridge ports, and a clean-traffic nwfilter.
