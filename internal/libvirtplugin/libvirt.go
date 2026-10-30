@@ -301,3 +301,13 @@ func scrub(s string, u *url.URL) string {
 	}
 	return s
 }
+
+func (c *libvirtClient) LibVersion(ctx context.Context) (uint64, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	if err := c.ensure(); err != nil {
+		return 0, err
+	}
+	return c.cur().ConnectGetLibVersion()
+}

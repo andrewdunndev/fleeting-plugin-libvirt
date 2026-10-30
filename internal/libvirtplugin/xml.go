@@ -15,6 +15,8 @@ type domainSpec struct {
 	VCPU          int
 	MemoryMiB     int
 	CredentialKey string // credential name; empty seeds nothing
+	Firmware      string // "efi" selects libvirt firmware autoselection
+	SecureBoot    bool
 	AuthorizedKey string
 }
 
@@ -60,8 +62,29 @@ type resourceDoc struct {
 }
 
 type osDoc struct {
-	Type   string     `xml:"type"`
-	SMBIOS *smbiosDoc `xml:"smbios,omitempty"`
+	Firmware string      `xml:"firmware,attr,omitempty"`
+	Type     osTypeDoc   `xml:"type"`
+	Features *fwFeatures `xml:"firmware,omitempty"`
+	Loader   *loaderDoc  `xml:"loader,omitempty"`
+	SMBIOS   *smbiosDoc  `xml:"smbios,omitempty"`
+}
+
+type osTypeDoc struct {
+	Machine string `xml:"machine,attr,omitempty"`
+	Value   string `xml:",chardata"`
+}
+
+type fwFeatures struct {
+	Feature []fwFeature `xml:"feature"`
+}
+
+type fwFeature struct {
+	Enabled string `xml:"enabled,attr"`
+	Name    string `xml:"name,attr"`
+}
+
+type loaderDoc struct {
+	Format string `xml:"format,attr"`
 }
 
 type smbiosDoc struct {
@@ -76,6 +99,11 @@ type sysInfoDoc struct {
 type featuresDoc struct {
 	ACPI struct{} `xml:"acpi"`
 	APIC struct{} `xml:"apic"`
+	SMM  *smmDoc  `xml:"smm,omitempty"`
+}
+
+type smmDoc struct {
+	State string `xml:"state,attr"`
 }
 
 type cpuDoc struct {
@@ -170,7 +198,7 @@ func domainXML(s domainSpec) (string, error) {
 		Metadata:   metadataDoc{Instance: instanceMeta{Prefix: s.Prefix}},
 		Memory:     memoryDoc{Unit: "MiB", Value: s.MemoryMiB},
 		VCPU:       s.VCPU,
-		OS:         osDoc{Type: "hvm"},
+		OS:         osDoc{Type: osTypeDoc{Value: "hvm"}},
 		CPU:        cpuDoc{Mode: "host-passthrough", Check: "none"},
 		OnPoweroff: "destroy",
 		OnReboot:   "restart",
@@ -180,6 +208,18 @@ func domainXML(s domainSpec) (string, error) {
 			{Name: "pit", TickPolicy: "delay"},
 			{Name: "hpet", Present: "no"},
 		}},
+	}
+	if s.Firmware == firmwareEFI {
+		d.OS.Firmware = firmwareEFI
+		d.OS.Type.Machine = "q35"
+		d.OS.Loader = &loaderDoc{Format: "qcow2"}
+		if s.SecureBoot {
+			d.OS.Features = &fwFeatures{Feature: []fwFeature{
+				{Enabled: "yes", Name: "secure-boot"},
+				{Enabled: "no", Name: "enrolled-keys"},
+			}}
+			d.Features.SMM = &smmDoc{State: "on"}
+		}
 	}
 	if s.Partition != "" {
 		d.Resource = &resourceDoc{Partition: s.Partition}

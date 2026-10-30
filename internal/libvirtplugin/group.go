@@ -84,6 +84,15 @@ func (g *InstanceGroup) Init(ctx context.Context, log hclog.Logger, settings pro
 		_ = client.Close()
 		return provider.ProviderInfo{}, fmt.Errorf("base volume %q in pool %q: %w; check plugin_config.pool_name and base_volume_name, and refresh the pool if the volume is new", g.BaseVolumeName, g.PoolName, err)
 	}
+	if g.Firmware == firmwareEFI {
+		if v, err := client.LibVersion(ctx); err != nil {
+			_ = client.Close()
+			return provider.ProviderInfo{}, fmt.Errorf("reading the libvirt version for plugin_config.firmware: %w", err)
+		} else if v < minEFILibvirt {
+			_ = client.Close()
+			return provider.ProviderInfo{}, fmt.Errorf("plugin_config.firmware \"efi\" needs libvirt 9.2.0 or newer, the host has %d.%d.%d", v/1000000, v/1000%1000, v%1000)
+		}
+	}
 	g.client = client
 
 	return provider.ProviderInfo{
@@ -234,6 +243,7 @@ func (g *InstanceGroup) createOne(ctx context.Context) error {
 		Name: name, Title: g.Title, Prefix: g.NamePrefix,
 		Partition: g.ResourcePartition, Network: g.NetworkName, DiskPath: path,
 		VCPU: g.VCPUCount, MemoryMiB: g.MemoryMiB,
+		Firmware: g.Firmware, SecureBoot: g.SecureBoot,
 	}
 	if g.authorized != "" {
 		spec.CredentialKey, spec.AuthorizedKey = g.credential, g.authorized

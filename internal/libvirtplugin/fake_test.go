@@ -17,15 +17,18 @@ type fakeDomain struct {
 }
 
 type fakeClient struct {
-	mu        sync.Mutex
-	base      Base
-	baseErr   error
-	volumes   map[string]string
-	domains   map[string]*fakeDomain
-	createErr error
-	volErr    error
-	agentErr  error
-	addrs     []string
+	mu      sync.Mutex
+	base    Base
+	baseErr error
+	// libVersion of 0 reads as a current libvirt.
+	libVersion    uint64
+	libVersionErr error
+	volumes       map[string]string
+	domains       map[string]*fakeDomain
+	createErr     error
+	volErr        error
+	agentErr      error
+	addrs         []string
 	// createDelay widens the window between admission and the domain
 	// appearing, so a lock that is released early is observable.
 	createDelay time.Duration
@@ -50,6 +53,16 @@ func newFake() *fakeClient {
 }
 
 func (f *fakeClient) Close() error { f.closed = true; return nil }
+
+func (f *fakeClient) LibVersion(context.Context) (uint64, error) {
+	if f.libVersionErr != nil {
+		return 0, f.libVersionErr
+	}
+	if f.libVersion == 0 {
+		return 10010000, nil
+	}
+	return f.libVersion, nil
+}
 
 func (f *fakeClient) BaseVolume(_ context.Context, _, _ string) (Base, error) {
 	return f.base, f.baseErr

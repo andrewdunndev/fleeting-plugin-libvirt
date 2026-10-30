@@ -30,6 +30,7 @@ Set `FLEETING_PLUGIN_PATH` to the same directory when you install and when you r
 ### Requirements
 
 - A KVM host, and read and write access to the libvirt socket for the account running the plugin.
+- For `firmware = "efi"`, libvirt 9.2.0 or newer on the host, checked at Init, and OVMF qcow2 firmware descriptors installed.
 - A base image as described under Guest in How it behaves.
 
 ### Verify a release
@@ -99,6 +100,8 @@ An unknown key fails Init and names the key.
 | `base_volume_name` | required | volume that instances clone |
 | `name_prefix` | required | must end in `-`; every domain and volume is named `<prefix><tag>-<id>` |
 | `max_size` | unbounded | upper bound on instances; the scaler's own cap applies either way |
+| `firmware` | `bios` | `bios` for the legacy BIOS domain, or `efi` for libvirt firmware autoselection on machine `q35` with a qcow2 loader |
+| `secure_boot` | `false` | requires `firmware = "efi"`; selects secure-boot firmware with `enrolled-keys` off and turns SMM on |
 | `vcpu_count` | 2 | vCPUs per instance |
 | `memory_mib` | 4096 | memory per instance |
 | `disk_size_gib` | base size | overlay size, never below the base volume |
@@ -111,6 +114,10 @@ An unknown key fails Init and names the key.
 `admit_command` sees `FLEETING_LIBVIRT_NAME`, `FLEETING_LIBVIRT_MEMORY_MIB` and
 `FLEETING_LIBVIRT_VCPU_COUNT`. A refusal stops Increase; the instances already
 started are returned without an error, and fleeting asks again later.
+
+### Secure boot hazard
+
+The secure-boot firmware descriptors require SMM, so `secure_boot` turns it on, and plain `efi` leaves it off. Under nested KVM, SMM can hang the guest kernel at ExitBootServices; the instance then never reaches sshd. Use `secure_boot` only on hosts that are not themselves guests.
 
 ## How it behaves
 

@@ -19,6 +19,11 @@ const (
 	defaultVCPU      = 2
 	defaultMemoryMiB = 4096
 	unboundedSize    = math.MaxInt32
+	firmwareBIOS     = "bios"
+	firmwareEFI      = "efi"
+	// minEFILibvirt is the first libvirt with the nvram format attribute, in
+	// the major*1000000 + minor*1000 + release form libvirt reports.
+	minEFILibvirt = 9002000
 )
 
 var prefixPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*-$`)
@@ -39,6 +44,8 @@ type Config struct {
 	LockFile          string `json:"lock_file"`
 	AdmitCommand      string `json:"admit_command"`
 	MaxSize           int    `json:"max_size"`
+	Firmware          string `json:"firmware"`
+	SecureBoot        bool   `json:"secure_boot"`
 }
 
 // UnmarshalJSON decodes strictly but defers the error to Init, so a bad key
@@ -65,6 +72,9 @@ func (c *Config) normalize() error {
 	if c.NetworkName == "" {
 		c.NetworkName = defaultNetwork
 	}
+	if c.Firmware == "" {
+		c.Firmware = firmwareBIOS
+	}
 	if c.VCPUCount == 0 {
 		c.VCPUCount = defaultVCPU
 	}
@@ -85,6 +95,10 @@ func (c *Config) normalize() error {
 		return errors.New("plugin_config.max_size must not be negative; leave it unset for no limit")
 	case c.VCPUCount < 0 || c.MemoryMiB < 0 || c.DiskSizeGiB < 0:
 		return errors.New("plugin_config vcpu_count, memory_mib and disk_size_gib must not be negative")
+	case c.Firmware != firmwareBIOS && c.Firmware != firmwareEFI:
+		return fmt.Errorf("plugin_config.firmware %q must be \"bios\" or \"efi\"", c.Firmware)
+	case c.SecureBoot && c.Firmware != firmwareEFI:
+		return errors.New("plugin_config.secure_boot requires firmware = \"efi\"")
 	case c.AdmitCommand != "" && c.LockFile == "":
 		return errors.New("plugin_config.admit_command requires lock_file: the lock spans the command and the VM start")
 	case strings.ContainsAny(c.Title, "\r\n"):

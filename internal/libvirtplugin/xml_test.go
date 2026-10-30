@@ -91,3 +91,45 @@ func TestParseDomainMAC(t *testing.T) {
 		t.Fatalf("got %q %v", got, err)
 	}
 }
+
+const (
+	goldenOSBIOS = `<os><type>hvm</type><smbios mode="sysinfo"></smbios></os>`
+	goldenOSEFI  = `<os firmware="efi"><type machine="q35">hvm</type><loader format="qcow2"></loader><smbios mode="sysinfo"></smbios></os>`
+	goldenOSSB   = `<os firmware="efi"><type machine="q35">hvm</type><firmware><feature enabled="yes" name="secure-boot"></feature><feature enabled="no" name="enrolled-keys"></feature></firmware><loader format="qcow2"></loader><smbios mode="sysinfo"></smbios></os>`
+	goldenFeat   = `<features><acpi></acpi><apic></apic></features>`
+	goldenFeatSB = `<features><acpi></acpi><apic></apic><smm state="on"></smm></features>`
+)
+
+func TestDomainXMLFirmwareModes(t *testing.T) {
+	tests := []struct {
+		name         string
+		firmware     string
+		secure       bool
+		wantOS       string
+		wantFeatures string
+		want         string
+	}{
+		{"unset is bios", "", false, goldenOSBIOS, goldenFeat, goldenDomain},
+		{"bios", "bios", false, goldenOSBIOS, goldenFeat, goldenDomain},
+		{"efi", "efi", false, goldenOSEFI, goldenFeat, ""},
+		{"secure boot", "efi", true, goldenOSSB, goldenFeatSB, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			s := fullSpec()
+			s.Firmware, s.SecureBoot = tc.firmware, tc.secure
+			got, err := domainXML(s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := tc.want
+			if want == "" {
+				want = strings.Replace(goldenDomain, goldenOSBIOS, tc.wantOS, 1)
+				want = strings.Replace(want, goldenFeat, tc.wantFeatures, 1)
+			}
+			if got != want {
+				t.Fatalf("domain XML:\n got %s\nwant %s", got, want)
+			}
+		})
+	}
+}

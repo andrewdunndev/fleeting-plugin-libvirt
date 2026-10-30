@@ -26,6 +26,8 @@ type DomainInfo struct {
 // Client is the slice of libvirt the plugin uses.
 type Client interface {
 	Close() error
+	// LibVersion returns the libvirt version as major*1000000 + minor*1000 + release.
+	LibVersion(ctx context.Context) (uint64, error)
 	BaseVolume(ctx context.Context, pool, name string) (Base, error)
 	// CreateVolume defines a volume from XML and returns its path.
 	CreateVolume(ctx context.Context, pool, name, xml string) (path string, err error)

@@ -721,6 +721,9 @@ func TestConfigValidation(t *testing.T) {
 		{"admit without lock", func(c *Config) { c.AdmitCommand = "true" }, "lock_file"},
 		{"multiline title", func(c *Config) { c.Title = "a\nb" }, "title"},
 		{"relative partition", func(c *Config) { c.ResourcePartition = "machine/ci" }, "resource_partition"},
+		{"unknown firmware", func(c *Config) { c.Firmware = "uefi" }, "firmware"},
+		{"secure boot on bios", func(c *Config) { c.SecureBoot = true }, "secure_boot requires"},
+		{"secure boot on explicit bios", func(c *Config) { c.Firmware, c.SecureBoot = "bios", true }, "secure_boot requires"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -740,7 +743,7 @@ func TestConfigDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	if c.URI != "qemu:///system" || c.NetworkName != "default" ||
-		c.VCPUCount != 2 || c.MemoryMiB != 4096 {
+		c.VCPUCount != 2 || c.MemoryMiB != 4096 || c.Firmware != "bios" || c.SecureBoot {
 		t.Fatalf("%+v", c)
 	}
 }
@@ -1079,5 +1082,73 @@ func TestInitGroupIDIsPoolAndPrefix(t *testing.T) {
 	info, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{})
 	if err != nil || info.ID != "libvirt/pool/job-" {
 		t.Fatalf("ID = %q, %v", info.ID, err)
+	}
+}
+
+func initEFI(t *testing.T, version uint64, verr error) (*fakeClient, error) {
+	t.Helper()
+	f := newFake()
+	f.libVersion, f.libVersionErr = version, verr
+	c := baseConfig()
+	c.Firmware = "efi"
+	g := &InstanceGroup{Config: c, connect: func(string) (Client, error) { return f, nil }}
+	_, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{})
+	return f, err
+}
+
+func TestInitEFIRequiresLibvirt92(t *testing.T) {
+	for _, v := range []uint64{9001000, 8000000, 9001999} {
+		f, err := initEFI(t, v, nil)
+		if err == nil || !strings.Contains(err.Error(), "9.2.0") || !f.closed {
+			t.Fatalf("version %d: err=%v closed=%v", v, err, f.closed)
+		}
+	}
+	for _, v := range []uint64{9002000, 10010000} {
+		if _, err := initEFI(t, v, nil); err != nil {
+			t.Fatalf("version %d: %v", v, err)
+		}
+	}
+	if f, err := initEFI(t, 0, errors.New("boom")); err == nil || !f.closed {
+		t.Fatalf("version read failure not reported: err=%v closed=%v", err, f.closed)
+	}
+}
+
+func TestInitBIOSNeverAsksLibvirtVersion(t *testing.T) {
+	f := newFake()
+	f.libVersion, f.libVersionErr = 1000000, errors.New("must not be read")
+	g := &InstanceGroup{Config: baseConfig(), connect: func(string) (Client, error) { return f, nil }}
+	if _, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInitRejectsFirmwareRules(t *testing.T) {
+	for name, c := range map[string]Config{
+		"secure_boot on bios": {Firmware: "bios", SecureBoot: true},
+		"unknown firmware":    {Firmware: "coreboot"},
+	} {
+		cfg := baseConfig()
+		cfg.Firmware, cfg.SecureBoot = c.Firmware, c.SecureBoot
+		g := &InstanceGroup{Config: cfg, connect: func(string) (Client, error) { return newFake(), nil }}
+		_, err := g.Init(context.Background(), hclog.NewNullLogger(), provider.Settings{})
+		if err == nil || !strings.Contains(err.Error(), "plugin_config.") {
+			t.Fatalf("%s: err=%v", name, err)
+		}
+	}
+}
+
+func TestCreateEmitsFirmwareXML(t *testing.T) {
+	c := baseConfig()
+	c.Firmware, c.SecureBoot = "efi", true
+	g, f := newGroup(t, c, false)
+	if n, err := g.Increase(context.Background(), 1); err != nil || n != 1 {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	for _, d := range f.domains {
+		for _, part := range []string{`<os firmware="efi">`, `name="secure-boot"`, `<smm state="on">`} {
+			if !strings.Contains(d.xml, part) {
+				t.Errorf("%s missing: %s", part, d.xml)
+			}
+		}
 	}
 }
