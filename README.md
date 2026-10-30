@@ -27,6 +27,20 @@ fleeting-artifact install registry.gitlab.com/dunn.dev/fleeting-plugin-libvirt:0
 
 Set `FLEETING_PLUGIN_PATH` to the same directory when you install and when you run, or set `plugin` to a binary path.
 
+### Requirements
+
+- A KVM host, and read and write access to the libvirt socket for the account running the plugin.
+- A base image as described under Guest in How it behaves.
+
+### Verify a release
+
+```
+cosign verify \
+  --certificate-identity-regexp '^https://gitlab\.com/dunn\.dev/fleeting-plugin-libvirt//\.gitlab-ci\.yml@refs/tags/.+$' \
+  --certificate-oidc-issuer https://gitlab.com \
+  registry.gitlab.com/dunn.dev/fleeting-plugin-libvirt:0.1
+```
+
 ## Use with GitLab Runner
 
 ```toml
@@ -72,7 +86,7 @@ protocol = "ssh"
 username = "runner"
 ```
 
-`name_prefix` must differ from every other daemon's on the same libvirt. The unit's user needs read and write access to the libvirt socket.
+`name_prefix` must differ from every other daemon's on the same libvirt.
 
 ## Configuration
 
@@ -114,8 +128,11 @@ started are returned without an error, and fleeting asks again later.
   and is seeded as `ssh.authorized_keys.<connector_config.username>` (`root`
   when empty). With it true nothing is seeded
   and `connector_config` passes through, so the base image must trust that key.
-- **Guest.** The base image needs the QEMU guest agent, which supplies the
-  address, and systemd to import the credential. systemd's stock
+- **Guest.** The base image boots with legacy BIOS on x86-64 with a virtio disk
+  and NIC, and needs the QEMU guest agent, which supplies the address, and
+  systemd to import the credential. Never overwrite the base volume while
+  instances run on overlays of it: upload a new volume name, change
+  `base_volume_name`, and let old instances drain. systemd's stock
   `provision.conf` imports only `ssh.authorized_keys.root`, so a non-root SSH
   account needs a oneshot unit that imports its own credential and writes the
   file before sshd starts (shown for `username = "runner"`):
