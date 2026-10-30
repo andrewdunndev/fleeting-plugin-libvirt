@@ -184,7 +184,7 @@ func TestInitRefusesPCIPool(t *testing.T) {
 		"peer unreadable": {func(f *fakeClient) {
 			f.nodeDevices["pci_0000_03_00_0"] = nodeXML("vfio-pci", "0x030000", 1, devA, peerP)
 		}, peerP},
-		"peer class only looks like a bridge": {func(f *fakeClient) {
+		"non-bridge peer with a non-bridge class": {func(f *fakeClient) {
 			f.nodeDevices["pci_0000_03_00_0"] = nodeXML("vfio-pci", "0x030000", 1, devA, peerP)
 			f.nodeDevices["pci_0000_03_00_1"] = nodeXML("xhci_hcd", "0x0c0330", 1, devA, peerP)
 		}, peerP},
@@ -225,5 +225,14 @@ func TestInitReadsCapsForPCIPool(t *testing.T) {
 	f = pciHost()
 	if err := initWith(t, baseConfig(), f); err != nil || len(f.nodeReads) != 0 {
 		t.Fatalf("err=%v reads=%v", err, f.nodeReads)
+	}
+}
+
+func TestInitReadsCapsOnceForTPMAndPCIPool(t *testing.T) {
+	f := pciHost()
+	c := pciConfig(devA)
+	c.TPM = true
+	if err := initWith(t, c, f); err != nil || len(f.capsCalls) != 1 {
+		t.Fatalf("err=%v calls=%v", err, f.capsCalls)
 	}
 }

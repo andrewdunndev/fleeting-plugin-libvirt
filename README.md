@@ -124,7 +124,7 @@ started are returned without an error, and fleeting asks again later.
 
 ### TPM
 
-The vTPM does not replace the host TPM a disk was enrolled to: a TPM2 keyslot is bound to one TPM's state, which a fresh per-instance emulator cannot reproduce, so a `tpm2-luks` sealed image will not unlock in a second instance. Runner images use a direct block setup. libvirt deletes the TPM state when it stops the domain, but leaves a per-VM swtpm log on the host, and the state of a VM lost without libvirt's stop path persists; clean both by age on the host.
+The TPM is validated against the system daemon. The vTPM does not replace the host TPM a disk was enrolled to: a TPM2 keyslot is bound to one TPM's state, which a fresh per-instance emulator cannot reproduce, so a `tpm2-luks` sealed image will not unlock in a second instance. Runner images use a direct block setup. libvirt deletes the TPM state when it stops the domain, but leaves a per-VM swtpm log on the host, and the state of a VM lost without libvirt's stop path persists; clean both by age on the host.
 
 ### Hardware
 
