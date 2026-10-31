@@ -141,7 +141,7 @@ fleeting does not verify guest host keys, so a guest that answers a sibling's ad
     DHCPSERVER = "<address of the network's DHCP server>"
 ```
 
-Without `CTRL_IP_LEARNING = "dhcp"` libvirt defaults to `any`, which locks an interface to the first address it sends from, so a guest can claim a sibling's address before the sibling's first packet. With `dhcp` only an address leased to the interface is allowed. `DHCPSERVER` names the trusted DHCP server, so a rogue server in a guest cannot hand out a sibling's address. With an SR-IOV `pci_devices` passthrough the interface is not filtered by libvirt; set VF `spoofchk on` on the host instead.
+Without `CTRL_IP_LEARNING = "dhcp"` libvirt defaults to `any`, which locks an interface to the first address it sends from, so a guest can claim a sibling's address before the sibling's first packet. With `dhcp` only an address leased to the interface is allowed. `DHCPSERVER` names the network's DHCP server. It does not stop a DHCP server in one guest answering a sibling: a sibling that takes that lease has its traffic dropped by the filter, so its job fails, but the session is never diverted. With an SR-IOV `pci_devices` passthrough the interface is not filtered by libvirt; set VF `spoofchk on` on the host instead.
 
 ### TPM
 

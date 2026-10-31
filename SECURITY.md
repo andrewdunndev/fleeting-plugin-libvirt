@@ -45,7 +45,8 @@ Port isolation alone does not stop a guest's ARP reply reaching the host; only
 the filter does. Set `nwfilter_parameters` `CTRL_IP_LEARNING = "dhcp"`, so an
 address is learned only from a DHCP lease and a guest cannot claim a sibling's
 address before the sibling's first packet (libvirt's default, `any`, locks the
-first address seen), and `DHCPSERVER` to the network's DHCP server, so a rogue
-server in a guest cannot hand one out. With SR-IOV hostdev passthrough libvirt
+first address seen), and `DHCPSERVER` to the network's DHCP server. A DHCP server in one guest
+can still answer a sibling; the filter then drops the sibling's traffic, so
+its job fails rather than being diverted. With SR-IOV hostdev passthrough libvirt
 does not filter the interface; set VF `spoofchk on` on the host instead. The
 README shows the configuration.
