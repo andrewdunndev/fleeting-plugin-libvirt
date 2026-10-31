@@ -23,18 +23,18 @@ variables:
   GOFLAGS: -mod=readonly
 
 include:
-  - component: gitlab.com/dunn.dev/pipeline/go-lint@4.13.0
-  - component: gitlab.com/dunn.dev/pipeline/go-audit@4.13.0
-  - component: gitlab.com/dunn.dev/pipeline/reference-check@4.13.0
+  - component: gitlab.com/dunn.dev/pipeline/go-lint@4.13.1
+  - component: gitlab.com/dunn.dev/pipeline/go-audit@4.13.1
+  - component: gitlab.com/dunn.dev/pipeline/reference-check@4.13.1
     inputs:
       reference_ref: main
       fail_on_violation: true
-  - component: gitlab.com/dunn.dev/pipeline/go-build@4.13.0
+  - component: gitlab.com/dunn.dev/pipeline/go-build@4.13.1
     inputs:
       job_name: go-build
       binary_name: fleeting-plugin-libvirt
       package_path: ./cmd/fleeting-plugin-libvirt
-  - component: gitlab.com/dunn.dev/pipeline/release-create@4.13.0
+  - component: gitlab.com/dunn.dev/pipeline/release-create@4.13.1
     inputs:
       stage: publish
       package_name: fleeting-plugin-libvirt
@@ -56,7 +56,7 @@ audit:
 
 test:
   stage: test
-  image: registry.gitlab.com/dunn.dev/pipeline/ci-go:4.13.0
+  image: registry.gitlab.com/dunn.dev/pipeline/ci-go:4.13.1
   variables:
     GOMODCACHE: $CI_PROJECT_DIR/.gomodcache
     GOCACHE: $CI_PROJECT_DIR/.gocache
@@ -75,7 +75,7 @@ test:
 # container registry, which must be enabled.
 release-oci:
   stage: release
-  image: registry.gitlab.com/dunn.dev/pipeline/ci-go:4.13.0
+  image: registry.gitlab.com/dunn.dev/pipeline/ci-go:4.13.1
   rules:
     - if: $CI_COMMIT_TAG
   variables:
