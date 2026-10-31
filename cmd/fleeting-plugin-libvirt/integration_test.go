@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/hashicorp/go-hclog"
+	"gitlab.com/dunn.dev/fleeting-plugin-libvirt/internal/libvirtplugin"
 	"gitlab.com/gitlab-org/fleeting/fleeting/integration"
 	"gitlab.com/gitlab-org/fleeting/fleeting/provider"
 )
@@ -27,6 +31,12 @@ func TestProvisioning(t *testing.T) {
 		pluginConfig["uri"] = uri
 	}
 
+	t.Cleanup(func() {
+		if t.Failed() {
+			removeLeftovers(t, pluginConfig)
+		}
+	})
+
 	pluginPath := integration.BuildPluginBinary(t, ".", "fleeting-plugin-libvirt")
 
 	integration.TestProvisioning(t, pluginPath, integration.Config{
@@ -44,4 +54,45 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// removeLeftovers drives the plugin itself to delete what a failed run left
+// under the name prefix: Update lists the instances and sweeps orphan volumes,
+// Decrease removes each instance with its volumes.
+func removeLeftovers(t *testing.T, pluginConfig map[string]any) {
+	t.Helper()
+	ctx := context.Background()
+
+	raw, err := json.Marshal(pluginConfig)
+	if err != nil {
+		t.Errorf("cleanup: encoding plugin config: %v", err)
+		return
+	}
+	g := &libvirtplugin.InstanceGroup{}
+	if err := json.Unmarshal(raw, g); err != nil {
+		t.Errorf("cleanup: decoding plugin config: %v", err)
+		return
+	}
+	if _, err := g.Init(ctx, hclog.NewNullLogger(), provider.Settings{}); err != nil {
+		t.Errorf("cleanup: init: %v", err)
+		return
+	}
+	defer func() {
+		if err := g.Shutdown(ctx); err != nil {
+			t.Errorf("cleanup: shutdown: %v", err)
+		}
+	}()
+
+	var names []string
+	if err := g.Update(ctx, func(instance string, _ provider.State) {
+		names = append(names, instance)
+	}); err != nil {
+		t.Errorf("cleanup: listing leftovers: %v", err)
+		return
+	}
+	removed, err := g.Decrease(ctx, names)
+	if err != nil {
+		t.Errorf("cleanup: removing %v: %v", names, err)
+	}
+	t.Logf("cleanup: removed leftover instances %v", removed)
 }
