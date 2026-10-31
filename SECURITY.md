@@ -48,5 +48,6 @@ address before the sibling's first packet (libvirt's default, `any`, locks the
 first address seen), and `DHCPSERVER` to the network's DHCP server. A DHCP server in one guest
 can still answer a sibling; the filter then drops the sibling's traffic, so
 its job fails rather than being diverted. With SR-IOV hostdev passthrough libvirt
-does not filter the interface; set VF `spoofchk on` on the host instead. The
-README shows the configuration.
+does not filter the interface. VF `spoofchk on` stops MAC spoofing only, not a
+forged ARP or IP claim, so give guests that need the filter a libvirt network
+interface with `nwfilter`. The README shows the configuration.
