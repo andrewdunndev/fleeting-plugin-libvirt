@@ -64,6 +64,8 @@ cosign verify \
 
 The isolation statements in this document assume one job per instance, which `capacity_per_instance = 1` and `max_use_count = 1` enforce; gitlab-runner reuses an instance indefinitely when `max_use_count` is unset.
 
+The docker-autoscaler executor needs a docker CLI in the guest image. On a podman guest, install `podman-docker` so `docker system dial-stdio` works.
+
 ## Use with forgehand
 
 ```toml
@@ -212,3 +214,7 @@ The secure-boot firmware descriptors require SMM, so `secure_boot` turns it on, 
   libvirtd drops it.
 - **Removal.** Decrease destroys the domain and deletes the volume, and treats
   missing ones as done.
+
+## Testing
+
+`just test` needs no hypervisor. `just integration` runs fleeting's provisioning harness against a real libvirt host and skips unless `FLEETING_LIBVIRT_BASE_VOLUME` is set; CONTRIBUTING lists the other variables.

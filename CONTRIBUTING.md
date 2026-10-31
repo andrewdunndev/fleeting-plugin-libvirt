@@ -18,6 +18,8 @@ just build   writes bin/fleeting-plugin-libvirt
 
 Run `just lint` and `just test` before opening a merge request.
 
+`just integration` runs fleeting's provisioning harness against a real libvirt host and skips unless `FLEETING_LIBVIRT_BASE_VOLUME` is set. It also reads `FLEETING_LIBVIRT_URI`, `FLEETING_LIBVIRT_POOL` (`images`), `FLEETING_LIBVIRT_NAME_PREFIX` (`itest-`), `FLEETING_LIBVIRT_NETWORK` (`default`) and `FLEETING_LIBVIRT_SSH_USERNAME` (`root`). The base volume must boot a guest that accepts that SSH login; the test creates and deletes up to three instances.
+
 ## Conventions
 
 - Errors say what to do next, not only what went wrong.
