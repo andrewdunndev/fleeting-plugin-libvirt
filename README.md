@@ -218,3 +218,9 @@ The secure-boot firmware descriptors require SMM, so `secure_boot` turns it on, 
 ## Testing
 
 `just test` needs no hypervisor. `just integration` runs fleeting's provisioning harness against a real libvirt host and skips unless `FLEETING_LIBVIRT_BASE_VOLUME` is set; CONTRIBUTING lists the other variables.
+
+## Support
+
+Supported on a best-effort basis by its maintainer. Report bugs in the project's [issues](https://gitlab.com/dunn.dev/fleeting-plugin-libvirt/-/issues) and vulnerabilities as SECURITY.md describes.
+
+Releases are 0.x. A minor release (0.2) may rename, remove or change a `plugin_config` key; a patch release (0.1.x) never does. Each break is listed in that release's notes with the change to make.
