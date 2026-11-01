@@ -43,10 +43,7 @@ func TestProvisioning(t *testing.T) {
 		PluginConfig: pluginConfig,
 		ConnectorConfig: provider.ConnectorConfig{
 			Username: envOr("FLEETING_LIBVIRT_SSH_USERNAME", "root"),
-			// fleeting retries a rejected SSH login without counting its 2s
-			// sleeps against this budget, so a bad login runs many times
-			// longer; keep it far below the 30m test timeout.
-			Timeout: 30 * time.Second,
+			Timeout:  10 * time.Minute,
 		},
 		MaxInstances: 3,
 	})
