@@ -5,9 +5,11 @@ the bar is whether they make clones of one base volume safer to create, find
 and delete.
 
 Issues and changes are welcome on either forge:
-GitLab (canonical): https://gitlab.com/dunn.dev/fleeting-plugin-libvirt (issues, merge requests)
-GitHub (mirror): https://github.com/andrewdunndev/fleeting-plugin-libvirt (issues, pull requests)
-GitHub pull requests are landed through GitLab; the mirror then marks them merged.
+
+- GitLab (canonical): https://gitlab.com/dunn.dev/fleeting-plugin-libvirt
+- GitHub (mirror): https://github.com/andrewdunndev/fleeting-plugin-libvirt
+
+GitHub pull requests land through GitLab; the mirror then marks them merged.
 
 ## Development environment
 
