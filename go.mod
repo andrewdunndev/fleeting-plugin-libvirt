@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	github.com/digitalocean/go-libvirt v0.0.0-20261013170128-efbbdf578ac8
 	github.com/hashicorp/go-hclog v1.6.3
-	gitlab.com/gitlab-org/fleeting/fleeting v0.0.0-20260915191451-6ed75a33d303
+	gitlab.com/gitlab-org/fleeting/fleeting v0.0.0-20260923033724-d721fe1a7bb8
 	golang.org/x/crypto v0.58.0
 )
 
