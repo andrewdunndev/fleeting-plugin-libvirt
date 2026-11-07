@@ -608,6 +608,31 @@ func TestConnectInfoIgnoresUnusableLeaseAddresses(t *testing.T) {
 	}
 }
 
+func TestConnectInfoErrorCarriesTheAgentAndLeaseState(t *testing.T) {
+	fastTimers(t)
+	for _, tc := range []struct {
+		leaseErr error
+		leases   []string
+		want     string
+	}{
+		{leaseErr: errors.New("lease lookup refused"), want: "agent not connected; leases: lease lookup refused"},
+		{leases: []string{"fe80::1"}, want: "agent not connected; leases: no usable lease"},
+	} {
+		g, f := newGroup(t, baseConfig(), false)
+		_, _ = g.Increase(context.Background(), 1)
+		var name string
+		for n := range f.domains {
+			name = n
+		}
+		f.agentErr = errors.New("agent not connected")
+		f.leaseErr, f.leaseAddrs = tc.leaseErr, tc.leases
+		_, err := g.ConnectInfo(context.Background(), name)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("err = %v, want it to contain %q", err, tc.want)
+		}
+	}
+}
+
 func TestConnectInfoIsBoundedAndNamesTheFix(t *testing.T) {
 	fastTimers(t)
 	g, f := newGroup(t, baseConfig(), false)

@@ -575,7 +575,7 @@ func (g *InstanceGroup) waitAddress(ctx context.Context, name string) (string, e
 
 // guestAddress asks the guest agent first and falls back to libvirt's DHCP
 // leases when the agent yields no usable address. With neither it returns the
-// agent's error.
+// agent's error and the lease lookup's.
 func (g *InstanceGroup) guestAddress(ctx context.Context, name string) (string, error) {
 	addrs, err := g.client.GuestAddresses(ctx, name)
 	if errors.Is(err, ErrNotFound) {
@@ -592,8 +592,9 @@ func (g *InstanceGroup) guestAddress(ctx context.Context, name string) (string, 
 		if a := pickAddress(leases); a != "" {
 			return a, nil
 		}
+		lerr = errors.New("no usable lease")
 	}
-	return "", err
+	return "", fmt.Errorf("%w; leases: %v", err, lerr)
 }
 
 // pickAddress prefers an IPv4 address over a global IPv6 one and ignores
