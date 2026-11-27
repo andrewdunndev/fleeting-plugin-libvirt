@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	github.com/digitalocean/go-libvirt v0.0.0-20261013170128-efbbdf578ac8
 	github.com/hashicorp/go-hclog v1.6.3
-	gitlab.com/gitlab-org/fleeting/fleeting v0.0.0-20261118095806-5cc162509056
+	gitlab.com/gitlab-org/fleeting/fleeting v0.0.0-20261126170042-cf3e52fa289d
 	golang.org/x/crypto v0.59.0
 )
 
@@ -31,7 +31,7 @@ require (
 	github.com/oklog/run v1.2.0 // indirect
 	github.com/stretchr/testify v1.12.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/mod v0.42.0 // indirect
+	golang.org/x/mod v0.43.0 // indirect
 	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
 	golang.org/x/text v0.44.0 // indirect
